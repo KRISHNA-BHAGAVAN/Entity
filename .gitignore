@@ -1,0 +1,21 @@
+venv/
+.env
+*.log
+
+__pycache__/
+
+*.log
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# VS Code settings
+.vscode/
+
+Testing/
+cache_dir/
+
