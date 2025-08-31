@@ -104,8 +104,8 @@ We recommend running Entity with **Docker** for the easiest and most consistent 
 1. **Clone & Enter Directory**
 
    ```bash
-   git clone https://github.com/KRISHNA-BHAGAVAN/Bajaj-Hackrx-6.0-Entity.git
-   cd Bajaj-Hackrx-6.0-Entity
+   git clone https://github.com/KRISHNA-BHAGAVAN/Entity.git
+   cd Entity
    ```
 
 2. **Install OCR Dependency**
@@ -128,7 +128,13 @@ We recommend running Entity with **Docker** for the easiest and most consistent 
    pip install -r requirements.txt
    ```
 
-5. **Run Application**
+5. **Install Playwright Browsers**
+
+   ```bash
+   playwright install
+   ```
+
+6. **Run Application**
 
    ```bash
    uvicorn main:app --host 0.0.0.0 --port 8000
