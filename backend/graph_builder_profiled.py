@@ -310,3 +310,14 @@ jarvis = workflow.compile()
 
 # Export performance summary function
 __all__ = ['jarvis', 'print_performance_summary']
+
+from IPython.display import Image, display
+png_data = jarvis.get_graph().draw_mermaid_png()
+
+# Display the image in environments like Jupyter Notebooks
+display(Image(png_data))
+
+# Or, save the image to a file
+with open("workflow.png", "wb") as f:
+    f.write(png_data)
+print("Workflow image saved as langgraph_workflow.png")
