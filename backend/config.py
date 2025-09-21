@@ -11,14 +11,14 @@ NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # --- Application Constants ---
-EMBED_BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "100"))
+EMBED_BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "30"))
 LLM_STREAMING_ENABLED = os.getenv("LLM_STREAMING_ENABLED", "true").lower() in ("true", "1", "yes")
-EMBED_CONCURRENCY = int(os.getenv("EMBED_CONCURRENCY", "10"))
+EMBED_CONCURRENCY = int(os.getenv("EMBED_CONCURRENCY", "12"))
 QA_CONCURRENCY = int(os.getenv("QA_CONCURRENCY", "4"))
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "400"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "20"))
-CACHE_DIR = "../cache_dir/faiss_cache"
-EMBED_CACHE_DIR = "../cache_dir/embed_cache"
+CACHE_DIR = "../pache_dir/faiss_cache"
+EMBED_CACHE_DIR = "../pache_dir/embed_cache"
 
 # --- Embedding Model Configuration ---
 from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
@@ -74,5 +74,7 @@ AGENT_LLM = AzureChatOpenAI(
 )
 
 
+from transformers import AutoModel
 
+pruner = AutoModel.from_pretrained("naver/provence-reranker-debertav3-v1", trust_remote_code=True)
 

@@ -20,11 +20,9 @@ from llm_services import stream_rag_chain
 from react_agent import reasoning_agent
 from utils import contains_api_or_url
 from config import (
-    embeddings, QA_CONCURRENCY, EMBED_BATCH_SIZE, EMBED_BATCH_API_AVAILABLE
+    pruner, embeddings, QA_CONCURRENCY, EMBED_BATCH_SIZE, EMBED_BATCH_API_AVAILABLE
 )
-from transformers import AutoModel
 
-provence = AutoModel.from_pretrained("naver/provence-reranker-debertav3-v1", trust_remote_code=True)
 
 # --- Agent State Definition ---
 class AgentState(TypedDict):
@@ -173,6 +171,7 @@ async def generate_answers(state: AgentState) -> AgentState:
         
         docs = await asyncio.to_thread(state['retriever'].invoke, q)
         context = "\n\n".join(d.page_content for d in docs)
+        print(f"🔍 Retrieved context length {len(context)} for question {idx+1}")
         return idx, context
     
     contexts = sorted(await asyncio.gather(*[_fetch_context(i, q) for i, q in enumerate(state['questions'])]), key=lambda x: x[0])
