@@ -84,32 +84,9 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 npm run dev
 ```
 
-## 🗄️ Database Schema
+## 🗄️ Database
 
-### Events Table
-```sql
-CREATE TABLE events (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  description TEXT,
-  created_at TIMESTAMP DEFAULT NOW(),
-  user_id UUID REFERENCES auth.users(id)
-);
-```
-
-### Templates Table
-```sql
-CREATE TABLE templates (
-  id TEXT PRIMARY KEY,
-  event_id TEXT REFERENCES events(id),
-  name TEXT NOT NULL,
-  original_file_path TEXT,
-  template_file_path TEXT,
-  variables JSONB DEFAULT '[]',
-  upload_date TIMESTAMP DEFAULT NOW(),
-  user_id UUID REFERENCES auth.users(id)
-);
-```
+The application uses Supabase PostgreSQL with tables for events and document templates. Database setup instructions are available in the deployment documentation.
 
 ## 🔄 Workflow
 
