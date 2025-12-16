@@ -1,0 +1,13 @@
+langchain
+langserve
+pydantic
+python-dotenv
+fastapi
+langchain-google-genai
+langchain-groq
+sse_starlette
+markitdown[all]
+python-multipart
+python-docx
+supabase
+PyJWT
