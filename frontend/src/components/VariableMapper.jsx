@@ -36,6 +36,7 @@ const VariableMapper = ({ docs, initialDocId, onUpdateDocs, onClose }) => {
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [refreshCount, setRefreshCount] = useState(0);
 
   const currentDoc = docs.find(d => d.id === currentDocId);
   const currentDocState = docStates[currentDocId];
@@ -62,21 +63,46 @@ const VariableMapper = ({ docs, initialDocId, onUpdateDocs, onClose }) => {
         setDocStates(initialStates);
       }
 
-      // Load documents one by one for better perceived performance
+      // Get auth token
+      const { supabase } = await import('../services/supabaseClient.js');
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
+      if (!token) {
+        console.error('No auth token available');
+        return;
+      }
+
+      // Load documents one by one
       for (const doc of docs) {
         if (!isMounted) break;
         
         try {
-          // Use backend markdown extraction
+          // Step 1: Download the actual document file from backend
+          const downloadResponse = await fetch(`http://localhost:8000/docs/${doc.id}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (!downloadResponse.ok) {
+            throw new Error(`Failed to download document: ${downloadResponse.status}`);
+          }
+          
+          const blob = await downloadResponse.blob();
+          const file = new File([blob], doc.name, { 
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+          });
+          
+          // Step 2: Extract markdown using backend API
           const { api } = await import('../config/api.js');
-          const file = new File([new Uint8Array()], doc.name, { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
           const result = await api.extractMarkdown(file);
           const text = result.markdown || 'Error loading preview';
 
+          // Step 3: Cache the markdown in state
           if (isMounted) {
             setDocStates(prev => ({
               ...prev,
               [doc.id]: {
+                originalMarkdown: text,
                 previewText: text,
                 isLoading: false,
                 mappings: doc.variables || []
@@ -89,6 +115,7 @@ const VariableMapper = ({ docs, initialDocId, onUpdateDocs, onClose }) => {
             setDocStates(prev => ({
               ...prev,
               [doc.id]: {
+                originalMarkdown: 'Error loading document preview.',
                 previewText: 'Error loading document preview.',
                 isLoading: false,
                 mappings: doc.variables || []
@@ -105,12 +132,7 @@ const VariableMapper = ({ docs, initialDocId, onUpdateDocs, onClose }) => {
     };
   }, [docs]);
 
-  // Cleanup cache on unmount
-  useEffect(() => {
-    return () => {
-      clearMarkdownCache();
-    };
-  }, []);
+
 
   const handleSaveMapping = () => {
     if (!originalText || !varName) return;
@@ -202,14 +224,31 @@ const VariableMapper = ({ docs, initialDocId, onUpdateDocs, onClose }) => {
   const handleRefreshPreview = async () => {
     setIsProcessing(true);
     try {
-      // Simplified preview refresh - use current mappings
-      const text = 'Preview updated with current mappings';
+      const newRefreshCount = refreshCount + 1;
+      setRefreshCount(newRefreshCount);
+      
+      const currentState = docStates[currentDocId];
+      if (!currentState) return;
+      
+      let previewText;
+      
+      if (newRefreshCount % 2 === 1) {
+        // Odd refresh: Show markdown with {{variable}} replacements
+        previewText = currentState.originalMarkdown;
+        currentMappings.forEach(mapping => {
+          const regex = new RegExp(mapping.originalText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+          previewText = previewText.replace(regex, `{{${mapping.variableName}}}`);
+        });
+      } else {
+        // Even refresh: Show original markdown
+        previewText = currentState.originalMarkdown;
+      }
 
       setDocStates(prev => ({
         ...prev,
         [currentDocId]: {
           ...prev[currentDocId],
-          previewText: text
+          previewText
         }
       }));
     } finally {

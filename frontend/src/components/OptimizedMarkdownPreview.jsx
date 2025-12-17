@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { debounce } from '../utils/performanceOptimizer';
 import ReactMarkdown from 'react-markdown';

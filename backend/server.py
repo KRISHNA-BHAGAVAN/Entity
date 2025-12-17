@@ -160,8 +160,6 @@ async def update_template(doc_id: str, variables: str = Form(...), file: UploadF
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-
 @app.delete("/docs/{doc_id}")
 async def remove_document(doc_id: str, token: Optional[str] = Depends(get_jwt_token)):
     try:
