@@ -189,5 +189,7 @@ Thumbs.db
 current_state.png
 .blackboxrules
 .amazonq
+.amazonq/rules
+.amazonq/rules/consider.md
 example-docs
 test*
