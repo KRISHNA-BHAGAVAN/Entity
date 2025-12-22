@@ -134,9 +134,10 @@ const App = () => {
             onClick={goHome}
             className="flex items-center gap-3 cursor-pointer select-none"
           >
-            <EntityLogo size={26} />
-            <span className="text-xl font-semibold tracking-tight text-slate-900">
-              Entity
+          <EntityLogo size={35} fill="currentColor" className="text-red-500" />
+
+          <span className="text-xl font-semibold tracking-tight text-blue-400">
+              Smart Documentation System
             </span>
           </div>
 
@@ -176,7 +177,7 @@ const App = () => {
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
             <button
               onClick={goHome}
-              className="mb-4 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"
+              className="mb-4 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 hover:cursor-pointer"
             >
               <ChevronLeft size={16} />
               Dashboard

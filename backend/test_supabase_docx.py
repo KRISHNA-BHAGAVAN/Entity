@@ -3,10 +3,13 @@ import tempfile
 import hashlib
 from supabase import create_client, Client
 from replace import replace_text_in_document
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
 
 # Supabase configuration
-SUPABASE_URL = "https://wsadegzzmafyxwkjwexk.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndzYWRlZ3p6bWFmeXh3a2p3ZXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzOTE2OTUsImV4cCI6MjA4MDk2NzY5NX0.f9XVehbpxKRdee0_E3EXrfHCmKuIlVsYI6ppGK73-u0"
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -137,7 +140,7 @@ def test_docx_processing_with_supabase(local_docx_path: str):
 
 if __name__ == "__main__":
     # Test with a local DOCX file
-    test_file = "multiple_modified_1.docx"  # Use existing test file
+    test_file = r"C:\Users\Krishna Bhagavan\projects\entity-v3\example-docs\3.Brouche -springboot-a.docx"  # Use existing test file
     
     if os.path.exists(test_file):
         test_docx_processing_with_supabase(test_file)

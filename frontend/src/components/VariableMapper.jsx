@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { replaceVariablesInDocx, extractMarkdownFromDocx } from '../services/docService';
 import { saveDoc } from '../services/storage';
 import { suggestVariables } from '../services/aiService';
 import OptimizedMarkdownPreview from './OptimizedMarkdownPreview';

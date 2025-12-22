@@ -188,4 +188,6 @@ Thumbs.db
 # Project specific
 current_state.png
 .blackboxrules
-.amazonq/memory-bank/
+.amazonq
+example-docs
+test*

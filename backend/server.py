@@ -12,7 +12,6 @@ from storage_service import (
     get_docs, upload_doc, download_doc, update_doc_template, delete_doc
 )
 from langserve import add_routes
-import tempfile, os
 
 # Set up the FastAPI app and add routes
 app = FastAPI(

@@ -3,34 +3,42 @@ import { supabase } from '../services/supabaseClient';
 const API_BASE_URL = 'http://localhost:8000';
 
 const getAuthHeaders = async () => {
-  // Use getSession() to get current valid token
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
-  
+
   if (!token) return {};
-  
+
   return { 'Authorization': `Bearer ${token}` };
 };
 
 const apiCall = async (endpoint, options = {}) => {
   const url = `${API_BASE_URL}${endpoint}`;
   const authHeaders = await getAuthHeaders();
-  
+
+  // If the body is FormData, don't set Content-Type
+  let headers = {};
+  if (options.body instanceof FormData) {
+    headers = { ...options.headers, ...authHeaders };
+  } else {
+    headers = { 'Content-Type': 'application/json', ...options.headers, ...authHeaders };
+  }
+
   const config = {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-      ...authHeaders
-    },
+    headers,
     ...options,
   };
 
   const response = await fetch(url, config);
-  
+
   if (!response.ok) {
     throw new Error(`API Error: ${response.status} ${response.statusText}`);
   }
-  
+
+  // If the response is a blob (e.g., file download), return it directly
+  if (options.isBlob) {
+    return response.blob();
+  }
+
   return response.json();
 };
 
@@ -42,68 +50,34 @@ export const api = {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     });
     formData.append('file', properFile);
-    
-    const authHeaders = await getAuthHeaders();
-    
-    return fetch(`${API_BASE_URL}/extract-markdown`, {
+
+    return apiCall('/extract-markdown', {
       method: 'POST',
-      headers: authHeaders,
       body: formData,
-    }).then(res => {
-      if (!res.ok) throw new Error(`API Error: ${res.status}`);
-      return res.json();
     });
   },
 
   suggestVariables: (text) => apiCall('/suggest_variables/invoke', {
     method: 'POST',
-    body: JSON.stringify({ 
+    body: JSON.stringify({
       input: { text: text.substring(0, 15000) }
     }),
   }),
 
   replaceText: async (docId, replacements) => {
-  const formData = new FormData();
+    const formData = new FormData();
+    formData.append('replacements_json', JSON.stringify(replacements));
 
-  // MUST match FastAPI parameter name
-  formData.append('replacements_json', JSON.stringify(replacements));
-
-  const authHeaders = await getAuthHeaders();
-
-  const response = await fetch(
-    `${API_BASE_URL}/replace-text/${docId}`,
-    {
+    const blob = await apiCall(`/replace-text/${docId}`, {
       method: 'POST',
-      headers: {
-        ...authHeaders, // Authorization only
-        // DO NOT set Content-Type manually
-      },
       body: formData,
-    }
-  );
+      isBlob: true, // Indicate that the response is a blob
+    });
 
-  if (!response.ok) {
-    throw new Error(`API Error: ${response.status}`);
-  }
+    // Optional: read replacement count
+    const count = blob.headers?.get('X-Total-Replacements');
+    if (count) console.log('Total replacements:', count);
 
-  // Backend returns a DOCX stream
-  const blob = await response.blob();
-
-  // Optional: read replacement count
-  const count = response.headers.get('X-Total-Replacements');
-  console.log('Total replacements:', count);
-
-  return blob;
-},
-
-};
-
-export const base64ToBlob = (base64, mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') => {
-  const byteCharacters = atob(base64);
-  const byteNumbers = new Array(byteCharacters.length);
-  for (let i = 0; i < byteCharacters.length; i++) {
-    byteNumbers[i] = byteCharacters.charCodeAt(i);
-  }
-  const byteArray = new Uint8Array(byteNumbers);
-  return new Blob([byteArray], { type: mimeType });
+    return blob;
+  },
 };
