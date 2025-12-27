@@ -126,13 +126,12 @@ export const Auth = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-
       <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border border-slate-100">
         <div className="text-center mb-8">
           <div className="bg-blue-600 text-white p-3 rounded-xl inline-block mb-4 shadow-blue-200 shadow-lg">
             <ShieldCheck size={32} />
           </div>
-          <h1 className="text-2xl font-bold text-slate-800">DocuFlow Access</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Secure Access</h1>
           <p className="text-slate-500 mt-2">
             Secure cloud storage for your ERDs
           </p>
@@ -223,6 +222,7 @@ export const Auth = () => {
               Email Address
             </label>
             <input
+              name="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -235,7 +235,8 @@ export const Auth = () => {
             <label className="block text-sm font-semibold text-slate-700 mb-2">
               Password
             </label>
-           <input
+            <input
+              name="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -244,7 +245,6 @@ export const Auth = () => {
               className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
               placeholder="••••••••"
             />
-
           </div>
 
           <button
@@ -275,7 +275,7 @@ export const Auth = () => {
               setShowResend(false);
               setShowVerify(false);
             }}
-            className="text-sm text-slate-500 hover:text-blue-600 font-medium transition-colors"
+            className="text-sm text-slate-500 hover:text-blue-600 hover:cursor-pointer font-medium transition-colors"
           >
             {isLogin
               ? "Need an account? Sign Up"
@@ -283,31 +283,7 @@ export const Auth = () => {
           </button>
         </div>
 
-        {/* Developer Tip */}
-        <div className="mt-8 pt-6 border-t border-slate-100 text-xs text-slate-400">
-          <div className="flex justify-between items-center">
-            <p className="font-semibold text-slate-500">Developer Options:</p>
-            <button
-              onClick={() => setShowVerify(!showVerify)}
-              className="text-blue-500 hover:underline"
-            >
-              Have a token?
-            </button>
-          </div>
-          <p className="mt-1">
-            To skip email confirmation, go to{" "}
-            <a
-              href="https://supabase.com/dashboard"
-              target="_blank"
-              rel="noreferrer"
-              className="underline hover:text-blue-500"
-            >
-              Supabase Dashboard
-            </a>{" "}
-            &rarr; Auth &rarr; Providers &rarr; Email and disable &quot;Confirm
-            email&quot;.
-          </p>
-        </div>
+        
       </div>
     </div>
   );

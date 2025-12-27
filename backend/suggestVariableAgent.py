@@ -10,7 +10,7 @@ class VariableSuggestion(BaseModel):
     Represents a suggested variable mapping from document text.
     """
     originalText: str = Field(description="The original text found in the document that looks like a placeholder.")
-    variableName: str = Field(description="A suggested snake_case variable name for the original text.")
+    variableName: str = Field(description="A suggested snake_case variable name for the original text based on the surrounding context")
 
 class VariableSuggestions(BaseModel):
     """
@@ -20,13 +20,13 @@ class VariableSuggestions(BaseModel):
 
 
 # Initialize the Gemini Model
-llm = ChatGroq(model="llama-3.1-8b-instant")
+# llm = ChatGroq(model="llama-3.1-8b-instant")
+llm = ChatGroq(model="llama-3.3-70b-versatile")
 
 # Define the Prompt Template
 prompt = ChatPromptTemplate.from_messages([
     ("system", """
-    You are a document automation assistant.
-    Analyze the provided document content (converted from DOCX to Markdown).
+    You are a document automation assistant. Analyze the provided document content.
     Identify text segments that look like placeholders, variables, or entities.
     Return a JSON array of objects following the provided schema.
     """),

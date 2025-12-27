@@ -1,34 +1,4 @@
-import { supabase } from './supabaseClient';
-
-const API_BASE_URL = 'http://localhost:8000';
-
-const getAuthHeaders = async () => {
-
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
-  if (!token) return {};
-  return { 'Authorization': `Bearer ${token}` };
-
-};
-
-const apiCall = async (endpoint, options = {}) => {
-  const url = `${API_BASE_URL}${endpoint}`;
-  const authHeaders = await getAuthHeaders();
-  
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      ...options.headers,
-      ...authHeaders
-    }
-  });
-  
-  if (!response.ok) {
-    throw new Error(`API Error: ${response.status} ${response.statusText}`);
-  }
-  
-  return response;
-};
+import { apiCall } from '../config/api';
 
 // Helper Functions
 export const downloadFile = (blob, filename) => {
@@ -45,8 +15,7 @@ export const downloadFile = (blob, filename) => {
 // Events Operations
 export const getEvents = async () => {
   const response = await apiCall('/events');
-  const data = await response.json();
-  return data.events.map(e => ({
+  return response.events.map(e => ({
     id: e.id,
     name: e.name,
     description: e.description,
@@ -75,55 +44,81 @@ export const deleteEvent = async (id) => {
 export const getDocs = async (eventId) => {
   const url = eventId ? `/docs?event_id=${eventId}` : '/docs';
   const response = await apiCall(url);
-  const data = await response.json();
   
-  return data.docs.map(d => ({
+  return response.docs.map(d => ({
     id: d.id,
     eventId: d.eventId,
     name: d.name,
     originalFilePath: d.originalFilePath,
     templateFilePath: d.templateFilePath,
     variables: d.variables || [],
-    uploadDate: new Date(d.uploadDate).getTime()
+    uploadDate: new Date(d.uploadDate).getTime(),
+    markdownContent: d.markdownContent,
+    tableData: d.tableData || []
   }));
 };
 
 export const saveDoc = async (doc, fileBlob) => {
-  const formData = new FormData();
-  formData.append('event_id', doc.eventId);
-  formData.append('name', doc.name);
-  
-  if (fileBlob) {
-    // New upload
-    formData.append('file', fileBlob);
-    const response = await apiCall('/docs', {
+  const isUpdate = !fileBlob && doc.id;
+
+  if (isUpdate) {
+    const res = await apiCall('/docs/confirm', {
       method: 'POST',
-      body: formData
+      body: JSON.stringify({
+        id: doc.id,
+        eventId: doc.eventId || doc.event_id,
+        name: doc.name,
+        variables: doc.variables || []
+      })
     });
-    const data = await response.json();
-    return data.docId;
-  } else {
-    // Update template with variables
-    const templateBlob = new Blob([doc.templateFileBase64], {
-      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    });
-    formData.append('file', templateBlob);
-    formData.append('variables', JSON.stringify(doc.variables));
-    
-    await apiCall(`/docs/${doc.id}/template`, {
-      method: 'PUT',
-      body: formData
-    });
+    return res.docId; // Return the ID
   }
+
+  // NEW UPLOAD STEP
+  const urlData = await apiCall(
+    `/docs/upload-url?name=${encodeURIComponent(doc.name)}&event_id=${doc.eventId}`, 
+    { method: 'POST' }
+  );
+
+  if (urlData.status === 'exists') {
+    console.log("File already exists, skipping storage upload.");
+    // Optionally call confirm to ensure DB is synced, or just return existing ID
+    return urlData.doc_id; 
+  }
+
+  const { upload_url, file_path, doc_id } = urlData;
+
+  // Perform the actual file upload to Supabase Storage
+  const uploadResponse = await fetch(upload_url, {
+    method: 'PUT',
+    body: fileBlob,
+    headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }
+  });
+
+  if (!uploadResponse.ok) throw new Error('Cloud storage upload failed');
+
+  const confirmData = await apiCall('/docs/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ 
+      ...doc, 
+      id: doc_id, 
+      file_path: file_path,
+      eventId: doc.eventId || doc.event_id 
+    })
+  });
+
+  return confirmData.docId;
 };
+
+
+
 
 export const deleteDoc = async (id) => {
   await apiCall(`/docs/${id}`, { method: 'DELETE' });
 };
 
 export const downloadDoc = async (docId, filename = 'document.docx') => {
-  const response = await apiCall(`/docs/${docId}`);
-  const blob = await response.blob();
+  const blob = await apiCall(`/docs/${docId}`, { isBlob: true });
   downloadFile(blob, filename);
   return blob;
 };

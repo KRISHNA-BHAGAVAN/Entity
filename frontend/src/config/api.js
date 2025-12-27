@@ -1,83 +1,83 @@
-import { supabase } from '../services/supabaseClient';
+import { supabase } from "../services/supabaseClient";
 
-const API_BASE_URL = 'http://localhost:8000';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+console.log(`API_BASE_URL: ${API_BASE_URL}`);
 
 const getAuthHeaders = async () => {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
+  // This forces token refresh if needed
+  const { data: userData, error: userError } =
+    await supabase.auth.getUser();
 
+  if (userError) {
+    console.error("User not authenticated:", userError.message);
+    return {};
+  }
+
+  const { data: sessionData } =
+    await supabase.auth.getSession();
+
+  const token = sessionData?.session?.access_token;
   if (!token) return {};
 
-  return { 'Authorization': `Bearer ${token}` };
+  return {
+    Authorization: `Bearer ${token}`,
+  };
 };
 
-const apiCall = async (endpoint, options = {}) => {
+
+export const apiCall = async (endpoint, options = {}) => {
   const url = `${API_BASE_URL}${endpoint}`;
+
+  // 1. Fetch the latest session token from Supabase
   const authHeaders = await getAuthHeaders();
 
-  // If the body is FormData, don't set Content-Type
-  let headers = {};
-  if (options.body instanceof FormData) {
-    headers = { ...options.headers, ...authHeaders };
-  } else {
-    headers = { 'Content-Type': 'application/json', ...options.headers, ...authHeaders };
-  }
+  // 2. Log headers for debugging (Check your browser console!)
+  console.log(`Sending request to: ${endpoint}`, {
+    hasToken: !!authHeaders["Authorization"],
+    method: options.method || "GET",
+  });
 
-  const config = {
-    headers,
-    ...options,
+  // 3. Smart Header Merging
+  // Priority order:
+  // - Default Content-Type (if not FormData)
+  // - Custom headers from the specific call (options.headers)
+  // - Auth headers (highest priority to ensure token is sent)
+  const headers = {
+    ...(!(options.body instanceof FormData) && {
+      "Content-Type": "application/json",
+    }),
+    ...options.headers,
+    ...authHeaders,
   };
 
-  const response = await fetch(url, config);
+  const config = {
+    ...options, // Spread options first (contains method, body, etc.)
+    headers, // Explicitly override headers with our merged object
+  };
 
-  if (!response.ok) {
-    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+  try {
+    const response = await fetch(url, config);
+
+
+    if (!response.ok) {
+      // 4. Enhanced error reporting
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        `API Error: ${response.status} ${response.statusText} - ${
+          errorData.detail || "No detail"
+        }`
+      );
+    }
+
+    if (options.isBlob) {
+      return response.blob();
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error(`Fetch error for ${endpoint}:`, error);
+    throw error;
   }
-
-  // If the response is a blob (e.g., file download), return it directly
-  if (options.isBlob) {
-    return response.blob();
-  }
-
-  return response.json();
 };
 
-export const api = {
-  extractMarkdown: async (file) => {
-    const formData = new FormData();
-    const fileName = file.name;
-    const properFile = new File([file], fileName.endsWith('.docx') ? fileName : fileName + '.docx', {
-      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    });
-    formData.append('file', properFile);
-
-    return apiCall('/extract-markdown', {
-      method: 'POST',
-      body: formData,
-    });
-  },
-
-  suggestVariables: (text) => apiCall('/suggest_variables/invoke', {
-    method: 'POST',
-    body: JSON.stringify({
-      input: { text: text.substring(0, 15000) }
-    }),
-  }),
-
-  replaceText: async (docId, replacements) => {
-    const formData = new FormData();
-    formData.append('replacements_json', JSON.stringify(replacements));
-
-    const blob = await apiCall(`/replace-text/${docId}`, {
-      method: 'POST',
-      body: formData,
-      isBlob: true, // Indicate that the response is a blob
-    });
-
-    // Optional: read replacement count
-    const count = blob.headers?.get('X-Total-Replacements');
-    if (count) console.log('Total replacements:', count);
-
-    return blob;
-  },
-};

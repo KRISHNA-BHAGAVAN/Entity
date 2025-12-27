@@ -11,3 +11,6 @@ python-multipart
 python-docx
 supabase
 PyJWT
+redis
+rapidfuzz
+tiktoken
