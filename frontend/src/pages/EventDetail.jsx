@@ -94,7 +94,7 @@ const EventDetail = ({ events }) => {
         </div>
 
         {/* Content */}
-        <div className="p-5 sm:p-6 bg-slate-50 min-h-[500px]">
+        <div className=" bg-slate-50 min-h-[500px] border">
           {activeTab === EventTab.TEMPLATES ? (
             <TemplateManager event={activeEvent} />
           ) : activeTab === EventTab.GENERATE ? (

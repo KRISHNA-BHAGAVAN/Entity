@@ -4,13 +4,24 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  define: {
+    global: 'globalThis',
+  },
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          markdown: ['react-markdown', 'remark-gfm', 'rehype-raw'],
-          docProcessing: ['jszip', 'mammoth', 'turndown', 'turndown-plugin-gfm']
+        manualChunks: (id) => {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom')) {
+              return 'vendor';
+            }
+            if (id.includes('react-markdown') || id.includes('remark-gfm') || id.includes('rehype-raw')) {
+              return 'markdown';
+            }
+            if (id.includes('jszip') || id.includes('mammoth') || id.includes('turndown')) {
+              return 'docProcessing';
+            }
+          }
         }
       }
     },
