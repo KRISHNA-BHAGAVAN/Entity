@@ -92,7 +92,6 @@ def get_docs(event_id: Optional[str] = None, jwt_token: Optional[str] = None) ->
             'name': d['name'],
             'originalFilePath': d['original_file_path'],
             'templateFilePath': d['template_file_path'],
-            'variables': d['variables'] or [],
             'uploadDate': d['upload_date'],
             'markdownContent': d.get('markdown_content', ''),
             'tableData': d.get('table_data', [])
@@ -162,7 +161,6 @@ def upload_doc(event_id: str, name: str, file_bytes: bytes, jwt_token: Optional[
         'name': name,
         'original_file_path': file_path,
         'template_file_path': file_path,
-        'variables': [],
         'upload_date': datetime.now().isoformat(),
         'markdown_content': None  # Will be updated by background task
     }
@@ -214,8 +212,7 @@ def update_doc_template(doc_id: str, variables: List[Dict[str, Any]], template_b
     
     # Update metadata
     supabase.table('templates').update({
-        'template_file_path': template_path,
-        'variables': variables
+        'template_file_path': template_path
     }).eq('id', doc_id).execute()
 
 def delete_doc(doc_id: str, jwt_token: Optional[str] = None) -> None:

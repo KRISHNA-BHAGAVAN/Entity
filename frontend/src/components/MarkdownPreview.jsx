@@ -75,7 +75,7 @@ const MarkdownPreview = ({ content, isLoading, onTextSelect, highlightLocations 
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3 min-h-[200px]">
+      <div className="flex flex-col items-center justify-center h-screen text-slate-400 gap-3 min-h-[200px]">
         <Loader2 className="animate-spin text-blue-600" size={32} />
         <p className="text-xs font-medium">Loading document...</p>
       </div>
@@ -86,7 +86,7 @@ const MarkdownPreview = ({ content, isLoading, onTextSelect, highlightLocations 
     <div
       ref={containerRef}
       onMouseUp={handleMouseUp}
-      className="h-full overflow-y-auto p-4 md:p-8 bg-white"
+      className="overflow-y-auto p-4 md:p-8 bg-white border-b "
       style={{
         userSelect: "text",
         WebkitUserSelect: "text",

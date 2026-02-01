@@ -13,11 +13,13 @@ import tiktoken
 import re
 import os
 
+
 # --------------------------------------------------------------------------
 # MARKDOWN LOCATION TRACKING (Primary Method)
 # --------------------------------------------------------------------------
-
-def find_reference_locations_in_markdown(markdown_content: str, reference: str, filename: str) -> List[Dict[str, Any]]:
+def find_reference_locations_in_markdown(
+    markdown_content: str, reference: str, filename: str
+) -> List[Dict[str, Any]]:
     """
     Find ALL exact locations of `reference` in MARKDOWN with precise positions.
     Perfect for frontend highlighting in markdown previews.
@@ -26,102 +28,120 @@ def find_reference_locations_in_markdown(markdown_content: str, reference: str, 
         return []
 
     locations = []
-    lines = markdown_content.split('\n')
-    
+    lines = markdown_content.split("\n")
+
     for line_idx, line in enumerate(lines):
         start_pos = 0
         while True:
             pos = line.find(reference, start_pos)
             if pos == -1:
                 break
-            
+
             # GLOBAL positions (full markdown)
             global_char_start = sum(len(l) + 1 for l in lines[:line_idx]) + pos
             global_char_end = global_char_start + len(reference)
-            
+
             # LINE positions (within this line only)
             line_char_start = pos
             line_char_end = pos + len(reference)
-            
+
             # Determine context type
             line_type = "paragraph"
             line_stripped = line.strip()
-            if line_stripped.startswith('|'):  # Markdown table
+            if line_stripped.startswith("|"):  # Markdown table
                 line_type = "table_row"
-            elif re.match(r'^#{1,6}\s', line):  # Header
+            elif re.match(r"^#{1,6}\s", line):  # Header
                 line_type = "header"
-            elif line_stripped.startswith('- ') or line_stripped.startswith('* '):  # List
+            elif line_stripped.startswith("- ") or line_stripped.startswith("* "):  # List
                 line_type = "list_item"
-            elif line_stripped.startswith('>'):  # Blockquote
+            elif line_stripped.startswith(">"):  # Blockquote
                 line_type = "blockquote"
-            
-            locations.append({
-                "filename": filename,
-                "type": line_type,
-                "line_index": line_idx,
-                "char_start": global_char_start,
-                "char_end": global_char_end,
-                "line_char_start": line_char_start,
-                "line_char_end": line_char_end,
-                "text": reference,
-                "context_line": line_stripped[:100]  # Truncated for readability
-            })
+
+            locations.append(
+                {
+                    "filename": filename,
+                    "type": line_type,
+                    "line_index": line_idx,
+                    "char_start": global_char_start,
+                    "char_end": global_char_end,
+                    "line_char_start": line_char_start,
+                    "line_char_end": line_char_end,
+                    "text": reference,
+                    "context_line": line_stripped[:100],  # Truncated for readability
+                }
+            )
             start_pos = pos + 1  # Allow overlapping matches
-    
+
     return locations
+
 
 def count_reference_in_markdown(markdown_content: str, reference: str) -> int:
     """Count occurrences in markdown (for backward compatibility)."""
     locations = find_reference_locations_in_markdown(markdown_content, reference, "")
     return len(locations)
 
+
 # --------------------------------------------------------------------------
 # DOCX FALLBACK (Optional)
 # --------------------------------------------------------------------------
+
 
 def normalize_text(text: str) -> str:
     if not text:
         return text
     return (
-        text.replace("\u201c", '"').replace("\u201d", '"')
-        .replace("\u2018", "'").replace("\u2019", "'")
-        .replace("\u2013", "-").replace("\u2014", "-")
-        .replace("\u00a0", " ").replace("\u2026", ".")
+        text.replace("\u201c", '"')
+        .replace("\u201d", '"')
+        .replace("\u2018", "'")
+        .replace("\u2019", "'")
+        .replace("\u2013", "-")
+        .replace("\u2014", "-")
+        .replace("\u00a0", " ")
+        .replace("\u2026", ".")
     )
 
-def find_reference_locations_in_docx(doc_path: str, reference: str) -> List[Dict[str, Any]]:
+
+def find_reference_locations_in_docx(
+    doc_path: str, reference: str
+) -> List[Dict[str, Any]]:
     """Fallback for DOCX files - only used if doc_paths provided."""
     if not os.path.exists(doc_path):
         return []
-    
+
     try:
         from docx import Document as DocxDocument
+
         doc = DocxDocument(doc_path)
         filename = os.path.basename(doc_path)
         locations = []
-        
+
         # Paragraphs only (fast)
         for para_idx, para in enumerate(doc.paragraphs):
             text = para.text or ""
             pos = text.find(reference)
             if pos != -1:
-                locations.append({
-                    "filename": filename,
-                    "type": "paragraph",
-                    "paragraph_index": para_idx,
-                    "char_start": pos,
-                    "char_end": pos + len(reference),
-                    "text": reference
-                })
+                locations.append(
+                    {
+                        "filename": filename,
+                        "type": "paragraph",
+                        "paragraph_index": para_idx,
+                        "char_start": pos,
+                        "char_end": pos + len(reference),
+                        "text": reference,
+                    }
+                )
         return locations
     except Exception:
         return []
+
 
 # ------------------------------------------------------------------------------
 # TOKEN COUNTING
 # ------------------------------------------------------------------------------
 
+
 _ENCODING = tiktoken.get_encoding("cl100k_base")
+
 
 def get_token_count(text: str) -> int:
     try:
@@ -129,21 +149,11 @@ def get_token_count(text: str) -> int:
     except Exception:
         return len(text) // 4 + 1
 
-# ------------------------------------------------------------------------------
-# GLOBAL REFERENCE DEDUPLICATION
-# ------------------------------------------------------------------------------
-
-GLOBAL_SEEN_REFS: set = set()
-
-def is_reference_unique(ref: str) -> bool:
-    return ref not in GLOBAL_SEEN_REFS
-
-def mark_reference_seen(ref: str) -> None:
-    GLOBAL_SEEN_REFS.add(ref)
 
 # ------------------------------------------------------------------------------
 # ENV + LLM + REDIS CACHE
 # ------------------------------------------------------------------------------
+
 
 load_dotenv(override=True)
 
@@ -154,7 +164,9 @@ llm = init_chat_model(
 )
 
 try:
-    redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+    redis_client = redis.Redis(
+        host="localhost", port=6379, db=0, decode_responses=True
+    )
     redis_client.ping()
     USE_REDIS = True
     print("✅ Redis cache enabled")
@@ -163,17 +175,22 @@ except Exception:
     USE_REDIS = False
     print("⚠️ Using in-memory cache")
 
+
 # ------------------------------------------------------------------------------
 # STATE
 # ------------------------------------------------------------------------------
 
+
 class SchemaDiscoveryState(TypedDict, total=False):
     documents: List[Tuple[str, str]]  # (filename, markdown_content)
-    doc_paths: List[str]              # Optional DOCX paths
+    doc_paths: List[str]  # Optional DOCX paths
     cache_key: Optional[str]
     partial_schemas: List[Dict[str, Any]]
     final_schema: Optional[Dict[str, Any]]
     stats: Dict[str, Any]
+    # user-provided extraction instructions (optional)
+    user_instructions: Optional[str]
+
 
 INITIAL_STATS: Dict[str, Any] = {
     "cache_hit": False,
@@ -197,67 +214,93 @@ INITIAL_STATS: Dict[str, Any] = {
     },
 }
 
+
 # ------------------------------------------------------------------------------
-# PROMPT (unchanged)
+# PROMPTS
 # ------------------------------------------------------------------------------
 
+
 SCHEMA_DISCOVERY_PROMPT = """
-You help users reuse and edit event-related documents.
+You extract editable fields from documents.
 
 Document: {filename}
 
+User instructions (may be empty):
+{user_instructions}
+
 Task:
-From the content, extract fields a user is likely to change from event to event or over time.
+- If user instructions are provided: extract ONLY fields that match or are clearly implied by them.
+- If no instructions are provided: extract fields users are likely to change over time.
+- Ignore all tabular data.
+- Exclude fields with no references.
 
-Focus on (when present):
-- Event names and titles
-- Event objectives / purpose
-- Dates (letter dates, event start/end, duration ranges)
-- Institutions, departments, venues
-- People grouped by role:
-  - event_organizer / organizers
-  - resource_person / resource_persons
-  - contact_person / contact_people
-  - patrons, chancellors, committee Info if applicable
-- Other clearly event-specific details that would usually change next time
-
-Rules:
-- Top-level keys: stable snake_case (e.g. event_name, event_dates, resource_persons, contact_email)
-- Reuse role-specific keys instead of inventing near-duplicates
-  (prefer event_organizer/contact_person/resource_person over generic key_person).
-- For each field, output:
-    - label       : human-readable label
-    - type        : one of [date, date_range, string, address, email, phone]
-    - references  : array of ALL exact text spans (phrases/sentences/paragraphs) that are semantically the same thing and would be edited together
-    - confidence  : float in [0.0, 1.0]
+Field rules:
+- Top-level keys must be stable snake_case.
+- Each field contains:
+  - label: human-readable name
+  - references: all exact text spans referring to the same fact
 
 Reference rules:
-- references MUST be exact substrings from the document.
-- Put all textual variants of the same fact in ONE field's references.
-  Example:
-    "08-09-2025 TO 10-09-2025",
-    "08/09/2025 to 10/09/2025",
-    "the workshop starts on 08-09-2025 and ends on 10-09-2025"
-  all belong to the same event_dates field.
-- Deduplicate references WITHIN each field.
-- Do NOT repeat exact same phrases across different fields.
+- References must be exact substrings from the document.
+- Group all textual variants of the same fact into one field.
+- Deduplicate references within a field.
+- Do not repeat the same text across different fields.
+- Do not include input placeholders like "________".
+Output:
+- STRICT JSON only
+- One flat JSON object
+- Keys = field names
+- Values = field objects
+- No markdown, prose, or comments
+"""
 
-Output STRICT JSON ONLY:
-- A single flat JSON object.
-- Keys = field names (snake_case).
-- Values = field objects as described.
+CONSOLIDATION_PROMPT = """
+You are consolidating extracted document fields.
+
+Input JSON:
+{fields_json}
+
+Task:
+- Identify fields that refer to the same real-world entity or fact,
+  even if they appear under different roles, names, formats, or contexts.
+- Merge such fields into a single canonical field.
+- Choose a stable snake_case key that best represents the entity or fact.
+- Preserve ALL original references under the merged field.
+- Do not invent new information.
+
+Rules:
+- If two or more keys clearly refer to the same person, event, organization, venue, date range, ID, or other real-world fact,
+  merge them into one field.
+- When merging:
+    - Pick a clear, generic snake_case key (e.g. primary_applicant_name, main_event_dates, organization_name).
+    - Combine all references from all merged fields (deduplicated exact strings).
+- If multiple fields represent different granular views of the same underlying concept (e.g. range vs components), prefer a single higher-level field unless information would be lost
+- Minor spelling differences, abbreviated names, titles, or role-based mentions may still refer to the same entity
+
+Output:
+- STRICT JSON only.
+- Flat object.
+- Keys = canonical field names (snake_case).
+- Values are objects with:
+    - label      : human-readable label
+    - references : array of exact original strings (from the input)
 - No markdown, no prose, no comments.
 """
+
 
 # ------------------------------------------------------------------------------
 # UTILS
 # ------------------------------------------------------------------------------
 
+
 @lru_cache(maxsize=128)
 def normalize_key(key: str) -> str:
     return key.lower().replace(" ", "_").replace("-", "_")
 
-def fuzzy_dedupe_references(references: List[str], threshold: int = 85) -> List[str]:
+
+def fuzzy_dedupe_references(
+    references: List[str], threshold: int = 85
+) -> List[str]:
     if len(references) <= 1:
         return references
     deduped = []
@@ -269,7 +312,9 @@ def fuzzy_dedupe_references(references: List[str], threshold: int = 85) -> List[
             deduped.append(ref)
     return deduped
 
+
 CACHE: Dict[str, Any] = {}
+
 
 def get_cache(key: str) -> Optional[Dict[str, Any]]:
     if USE_REDIS:
@@ -280,6 +325,7 @@ def get_cache(key: str) -> Optional[Dict[str, Any]]:
             return None
     return CACHE.get(key)
 
+
 def set_cache(key: str, value: Dict[str, Any], ttl: int = 3600) -> None:
     if USE_REDIS:
         try:
@@ -289,13 +335,14 @@ def set_cache(key: str, value: Dict[str, Any], ttl: int = 3600) -> None:
             pass
     CACHE[key] = value
 
+
 def track_llm_usage(
     stats: Dict[str, Any],
     input_tokens: int,
     output_tokens: int,
     prompt_chars: int,
 ) -> Dict[str, Any]:
-    llm = stats.setdefault(
+    llm_stats = stats.setdefault(
         "llm",
         {
             "calls": [],
@@ -317,9 +364,9 @@ def track_llm_usage(
         "prompt_chars": prompt_chars,
         "total_tokens": input_tokens + output_tokens,
     }
-    llm["calls"].append(call_stats)
+    llm_stats["calls"].append(call_stats)
 
-    summary = llm["summary"]
+    summary = llm_stats["summary"]
     summary["llm_calls"] += 1
     summary["total_input_tokens"] += input_tokens
     summary["total_output_tokens"] += output_tokens
@@ -335,9 +382,11 @@ def track_llm_usage(
         )
     return stats
 
+
 # ------------------------------------------------------------------------------
 # NODES
 # ------------------------------------------------------------------------------
+
 
 def cache_check(state: SchemaDiscoveryState) -> Dict[str, Any]:
     stats = state.get("stats", INITIAL_STATS.copy())
@@ -350,6 +399,11 @@ def cache_check(state: SchemaDiscoveryState) -> Dict[str, Any]:
     for p in state.get("doc_paths", []):
         parts.append(f"docx:{p}")
 
+    # include user instructions (or empty) in cache key so different instructions
+    # over same docs don't collide.
+    user_instr = (state.get("user_instructions") or "").strip()
+    parts.append(f"user_instructions:{user_instr[:500]}")
+
     content_hash = hashlib.sha256("".join(parts).encode()).hexdigest()
     stats["total_chars_processed"] = total_chars
 
@@ -358,19 +412,28 @@ def cache_check(state: SchemaDiscoveryState) -> Dict[str, Any]:
         print(f"✅ CACHE HIT: {content_hash[:8]}")
         stats["cache_hit"] = True
         stats["processing_time"] = 0.001
-        stats["total_locations"] = cached.get("stats", {}).get("total_locations", 0)
+        stats["total_locations"] = cached.get("stats", {}).get(
+            "total_locations", 0
+        )
         return {
             "final_schema": cached["schema"],
             "stats": stats,
         }
 
     print(f"🔄 CACHE MISS: {content_hash[:8]}")
-    GLOBAL_SEEN_REFS.clear()
     return {"cache_key": content_hash, "stats": stats}
 
+
 def map_discover_schema(state: SchemaDiscoveryState) -> Dict[str, Any]:
+    """
+    Phase A — Raw Discovery.
+    Over-extract, do not globally dedupe, allow overlaps.
+    """
     partials: List[Dict[str, Any]] = []
     stats = state.get("stats", INITIAL_STATS.copy())
+
+    user_instructions_raw = state.get("user_instructions") or ""
+    user_instructions_for_prompt = user_instructions_raw.strip()
 
     for i, (filename, md_raw) in enumerate(state["documents"]):
         raw_length = len(md_raw)
@@ -384,7 +447,10 @@ def map_discover_schema(state: SchemaDiscoveryState) -> Dict[str, Any]:
             content = md_raw[:8000]
             print(f"  📤 Sending {len(content)} chars to LLM...")
 
-            prompt = SCHEMA_DISCOVERY_PROMPT.format(filename=filename)
+            prompt = SCHEMA_DISCOVERY_PROMPT.format(
+                filename=filename,
+                user_instructions=user_instructions_for_prompt,
+            )
             full_prompt = prompt + "\n\n" + content
 
             prompt_tokens = get_token_count(full_prompt)
@@ -419,17 +485,13 @@ def map_discover_schema(state: SchemaDiscoveryState) -> Dict[str, Any]:
                 f"  ✅ PARSED: {len(partial_schema)} keys: {list(partial_schema.keys())}"
             )
 
-            # Filter references to only unique ones (character-for-character)
+            # Per-field internal dedupe only (no global dedupe, allow overlaps)
             for field_key, field_val in partial_schema.items():
                 if isinstance(field_val, dict) and "references" in field_val:
-                    refs = field_val["references"]
-                    unique_refs = []
-                    for ref in refs:
-                        if is_reference_unique(ref):
-                            unique_refs.append(ref)
-                            mark_reference_seen(ref)
-                        else:
-                            print(f"  ⏭️ Skipping duplicate ref in {field_key}: {repr(ref)[:50]}...")
+                    refs = field_val.get("references") or []
+                    # exact and fuzzy dedupe within the field
+                    unique_refs = list(dict.fromkeys(refs))
+                    unique_refs = fuzzy_dedupe_references(unique_refs)
                     field_val["references"] = unique_refs
                     field_val["source_filename"] = filename
 
@@ -451,7 +513,12 @@ def map_discover_schema(state: SchemaDiscoveryState) -> Dict[str, Any]:
     print(f"\n🎯 TOTAL PARTIALS: {len(partials)}")
     return {"partial_schemas": partials, "stats": stats}
 
+
 def merge_schemas_enhanced(state: SchemaDiscoveryState) -> Dict[str, Any]:
+    """
+    Phase A continued — structural merge only.
+    No semantic consolidation; just union of fields + references across docs.
+    """
     start_time = time.time()
     merged: Dict[str, Any] = {}
 
@@ -482,19 +549,17 @@ def merge_schemas_enhanced(state: SchemaDiscoveryState) -> Dict[str, Any]:
                 continue
 
             merged_field = merged_section["fields"].setdefault(
-                field_key, field_val.copy()
+                field_key, {"label": field_val.get("label"), "references": []}
             )
 
-            # Merge references (global dedup already handled)
-            existing_refs = set(merged_field.get("references", []))
-            new_refs = set(field_val.get("references", []))
-            merged_refs = sorted(existing_refs.union(new_refs))
+            # union of references (exact-dedup only here)
+            existing_refs = merged_field.get("references") or []
+            new_refs = field_val.get("references") or []
+            merged_refs = list(dict.fromkeys(existing_refs + new_refs))
             merged_field["references"] = merged_refs
 
-            merged_field["doc_frequency"] = merged_field.get("doc_frequency", 0) + 1
-            merged_field["confidence"] = max(
-                merged_field.get("confidence", 0),
-                field_val.get("confidence", 0),
+            merged_field["doc_frequency"] = (
+                merged_field.get("doc_frequency", 0) + 1
             )
 
             source_files = merged_field.setdefault("source_files", [])
@@ -502,7 +567,7 @@ def merge_schemas_enhanced(state: SchemaDiscoveryState) -> Dict[str, Any]:
             if source_file and source_file not in source_files:
                 source_files.append(source_file)
 
-    # Sort fields by importance
+    # Sort fields by importance: doc_frequency then number of references
     for section in merged.values():
         fields = section.get("fields", {})
         if isinstance(fields, dict):
@@ -510,8 +575,7 @@ def merge_schemas_enhanced(state: SchemaDiscoveryState) -> Dict[str, Any]:
                 sorted(
                     fields.items(),
                     key=lambda x: (
-                        x[1].get("doc_frequency", 0)
-                        * x[1].get("confidence", 0),
+                        x[1].get("doc_frequency", 0),
                         len(x[1].get("references", [])),
                     ),
                     reverse=True,
@@ -532,71 +596,180 @@ def merge_schemas_enhanced(state: SchemaDiscoveryState) -> Dict[str, Any]:
     )
 
     print(
-        f"🎉 FINAL MERGE: {total_fields} fields from {len(state['partial_schemas'])} docs"
+        f"🎉 FINAL MERGE (pre-consolidation): {total_fields} fields from {len(state['partial_schemas'])} docs"
     )
-    print(f"📋 GLOBAL UNIQUE REFS: {len(GLOBAL_SEEN_REFS)}")
     return {
         "final_schema": merged,
         "stats": stats,
     }
 
+
+def consolidate_entities_llm(state: SchemaDiscoveryState) -> Dict[str, Any]:
+    """
+    Phase B — Entity/Fact Consolidation.
+    Take merged.fields -> compact text-only structure -> LLM -> unified canonical fields.
+    """
+    final_schema = state.get("final_schema", {})
+    if not final_schema:
+        return {}
+
+    document_fields_section = final_schema.get("document_fields", {})
+    fields = document_fields_section.get("fields", {}) or {}
+
+    # Build compact structure: { field_key: [references...] }
+    compact_fields: Dict[str, List[str]] = {}
+    for field_key, field_val in fields.items():
+        refs = field_val.get("references") or []
+        if not refs:
+            continue
+        compact_fields[field_key] = refs
+
+    compact_payload = {"fields": compact_fields}
+    fields_json = json.dumps(compact_payload, ensure_ascii=False)
+
+    prompt = CONSOLIDATION_PROMPT.format(fields_json=fields_json)
+    prompt_tokens = get_token_count(prompt)
+
+    start_time = time.time()
+    response = llm.invoke(
+        [
+            SystemMessage(content=prompt),
+            HumanMessage(content="Return only the consolidated JSON."),
+        ]
+    )
+    response_time = time.time() - start_time
+    output_tokens = get_token_count(response.content)
+
+    print(
+        f"🔁 CONSOLIDATION LLM RESPONSE ({len(response.content)} chars, ~{output_tokens} tokens, {response_time:.2f}s)"
+    )
+    print(f"    {repr(response.content[:200])}...")
+
+    response_text = response.content.strip()
+    start = response_text.find("{")
+    end = response_text.rfind("}") + 1
+    json_str = response_text[start:end] if start != -1 else None
+
+    if not json_str:
+        print("  ❌ NO JSON FOUND DURING CONSOLIDATION — keeping original merged schema")
+        consolidated_fields = fields
+    else:
+        consolidated_fields = json.loads(json_str)
+
+    # Re-wrap into the same "document_fields" section structure, preserving source_files if possible
+    new_fields: Dict[str, Any] = {}
+    for canon_key, canon_val in consolidated_fields.items():
+        # try to reuse some label, otherwise fallback to provided label
+        label = canon_val.get("label") or canon_key.replace("_", " ").title()
+        refs = canon_val.get("references") or []
+
+        # Collect source_files from original fields where the references came from
+        source_files: List[str] = []
+        for original_key, original_field in fields.items():
+            orig_refs = original_field.get("references") or []
+            if any(r in orig_refs for r in refs):
+                for sf in original_field.get("source_files", []):
+                    if sf not in source_files:
+                        source_files.append(sf)
+
+        new_fields[canon_key] = {
+            "label": label,
+            "references": refs,
+            "source_files": source_files,
+            # doc_frequency is approximate but useful: how many original fields contributed
+            "doc_frequency": sum(
+                1
+                for original_key, original_field in fields.items()
+                if any(
+                    r in (original_field.get("references") or [])
+                    for r in refs
+                )
+            ),
+        }
+
+    final_schema["document_fields"]["fields"] = new_fields
+
+    stats = state["stats"].copy()
+    stats = track_llm_usage(
+        stats,
+        input_tokens=prompt_tokens,
+        output_tokens=output_tokens,
+        prompt_chars=len(prompt),
+    )
+
+    print(
+        f"✅ CONSOLIDATION DONE: {len(new_fields)} canonical fields from {len(fields)} raw fields"
+    )
+    return {"final_schema": final_schema, "stats": stats}
+
+
 def compute_frequencies_and_locations(state: SchemaDiscoveryState) -> Dict[str, Any]:
     """
+    Phase C — Re-attach locations.
     Compute frequencies AND precise markdown locations for frontend highlighting.
     """
     final_schema = state.get("final_schema", {})
     documents = state.get("documents", [])
     doc_paths = state.get("doc_paths", [])
-    
+
     if not final_schema or not documents:
         return {}
 
     path_by_basename = {os.path.basename(p): p for p in doc_paths}
     document_fields = final_schema.get("document_fields", {})
     fields = document_fields.get("fields", {})
-    
+
     print("📍 COMPUTING MARKDOWN LOCATIONS + FREQUENCIES:")
     total_locations = 0
-    
+
     for field_key, field_val in fields.items():
         refs = field_val.get("references", [])
         source_files = field_val.get("source_files", [])
         all_locations = []
         total_freq = 0
-        
+
         for ref in refs:
             if not ref:
                 continue
-            
+
             # PRIMARY: Search in markdown documents
             for filename, markdown_content in documents:
-                if any(fname in filename for fname in source_files):
-                    locations = find_reference_locations_in_markdown(markdown_content, ref, filename)
+                if not source_files or any(
+                    fname in filename for fname in source_files
+                ):
+                    locations = find_reference_locations_in_markdown(
+                        markdown_content, ref, filename
+                    )
                     all_locations.extend(locations)
                     total_freq += len(locations)
                     if locations:
-                        print(f"  📍 {field_key}: '{ref}' → {len(locations)} locs in {filename}")
-            
+                        print(
+                            f"  📍 {field_key}: '{ref}' → {len(locations)} locs in {filename}"
+                        )
+
             # FALLBACK: DOCX files (if provided)
             for fname in source_files:
                 full_path = path_by_basename.get(fname) or next(
                     (p for p in doc_paths if p.endswith(fname)), None
                 )
                 if full_path:
-                    docx_locations = find_reference_locations_in_docx(full_path, ref)
+                    docx_locations = find_reference_locations_in_docx(
+                        full_path, ref
+                    )
                     all_locations.extend(docx_locations)
                     total_freq += len(docx_locations)
-        
+
         # Store COMPLETE locations for frontend
         field_val["locations"] = all_locations
         field_val["frequency"] = total_freq
         field_val["location_count"] = len(all_locations)
         total_locations += len(all_locations)
-    
+
     stats = state["stats"].copy()
     stats["total_locations"] = total_locations
     print(f"✅ {total_locations} TOTAL LOCATIONS computed across all fields")
     return {"final_schema": final_schema, "stats": stats}
+
 
 def cache_store(state: SchemaDiscoveryState) -> Dict[str, Any]:
     if state.get("cache_key"):
@@ -605,19 +778,26 @@ def cache_store(state: SchemaDiscoveryState) -> Dict[str, Any]:
             "stats": state.get("stats", {}),
         }
         set_cache(state["cache_key"], cache_data)
-        print(f"💾 CACHED: {state['cache_key'][:8]} with {state['stats'].get('total_locations', 0)} locations")
+        print(
+            f"💾 CACHED: {state['cache_key'][:8]} with {state['stats'].get('total_locations', 0)} locations"
+        )
     return {}
+
 
 # ------------------------------------------------------------------------------
 # LANGGRAPH
 # ------------------------------------------------------------------------------
+
 
 graph = StateGraph(SchemaDiscoveryState)
 
 graph.add_node("cache_check", cache_check)
 graph.add_node("map_discover_schema", map_discover_schema)
 graph.add_node("merge_schemas", merge_schemas_enhanced)
-graph.add_node("compute_frequencies_and_locations", compute_frequencies_and_locations)
+graph.add_node("consolidate_entities", consolidate_entities_llm)
+graph.add_node(
+    "compute_frequencies_and_locations", compute_frequencies_and_locations
+)
 graph.add_node("cache_store", cache_store)
 
 graph.add_edge(START, "cache_check")
@@ -625,7 +805,8 @@ graph.add_conditional_edges(
     "cache_check", lambda s: END if s.get("final_schema") else "map_discover_schema"
 )
 graph.add_edge("map_discover_schema", "merge_schemas")
-graph.add_edge("merge_schemas", "compute_frequencies_and_locations")
+graph.add_edge("merge_schemas", "consolidate_entities")
+graph.add_edge("consolidate_entities", "compute_frequencies_and_locations")
 graph.add_edge("compute_frequencies_and_locations", "cache_store")
 graph.add_edge("cache_store", END)
 

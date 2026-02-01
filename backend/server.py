@@ -1,5 +1,6 @@
 import json,uuid
 from datetime import datetime
+import os
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header, BackgroundTasks
 from typing import Dict, Any, Optional
@@ -8,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from extract import docx_bytes_to_markdown_for_preview
 from replace import replace_text_in_document_bytes
-from suggestVariableAgent import variable_suggestion_chain
 from storage_service import (
     get_events, save_event, delete_event,
     get_docs, delete_all_event_docs, download_doc, update_doc_template, delete_doc,
@@ -16,7 +16,6 @@ from storage_service import (
 )
 from schemaModels import SchemaDiscoveryRequest
 from schemaAgent import  schema_discovery_workflow, INITIAL_STATS
-from langserve import add_routes
 
 # Set up the FastAPI app and add routes
 app = FastAPI(
@@ -39,13 +38,6 @@ def get_jwt_token(authorization: Optional[str] = Header(None)):
     if authorization and authorization.startswith("Bearer "):
         return authorization[7:]  # Remove "Bearer " prefix
     return None
-
-# Expose the chain via LangServe
-add_routes(
-    app,
-    variable_suggestion_chain,
-    path="/suggest_variables",
-)
 
 @app.post("/extract-markdown")
 async def extract_markdown(file: UploadFile = File(...), token: Optional[str] = Depends(get_jwt_token)):
@@ -161,7 +153,7 @@ async def remove_event(event_id: str, token: Optional[str] = Depends(get_jwt_tok
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/docs")
-async def list_docs(event_id: Optional[str] = None, token: Optional[str] = Depends(get_jwt_token)):
+async def list_docs(event_id: str | None = None, token: Optional[str] = Depends(get_jwt_token)):
     try:
         docs = get_docs(event_id, token)
         return {"docs": docs}
@@ -227,8 +219,7 @@ async def confirm_upload(data: dict, background_tasks: BackgroundTasks, token: O
         update_data = {
             'id': doc_id,
             'event_id': event_id,
-            'name': data.get('name'),
-            'variables': data.get('variables', [])
+            'name': data.get('name')
         }
 
         # 2. Only add these fields if a path is provided (indicating a successful storage upload)
@@ -339,6 +330,7 @@ async def manual_extract(doc_id: str, token: Optional[str] = Depends(get_jwt_tok
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/discover-schema")
 async def discover_schema(req: SchemaDiscoveryRequest):
     if not req.documents:
@@ -359,16 +351,18 @@ async def discover_schema(req: SchemaDiscoveryRequest):
                 if doc_tables:
                     tables_data.append({
                         "filename": doc.filename,
-                        "tables": doc_tables
+                        "tables": doc_tables,
                     })
             except Exception as e:
                 print(f"Error extracting tables from {doc.filename}: {e}")
 
+    # Pass optional user_instructions; can be None/empty
     result = schema_discovery_workflow.invoke(
         {
             "documents": doc_tuples,
             "doc_paths": doc_paths,
             "stats": INITIAL_STATS.copy(),
+            "user_instructions": req.user_instructions,
         }
     )
 
@@ -392,6 +386,7 @@ async def discover_schema(req: SchemaDiscoveryRequest):
         }
 
     return response
+
     
 if __name__ == "__main__":
     import uvicorn

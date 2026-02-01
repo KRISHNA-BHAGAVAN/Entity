@@ -1,25 +1,42 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import { Plus, Minus, X, Undo, Redo } from 'lucide-react';
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { Undo2, Redo2, Table as TableIcon, Copy, Image } from "lucide-react";
+import html2canvas from "html2canvas";
 
-const EditableTable = ({ tableData, onTableUpdate, viewMode = 'original', tableEdits = [] }) => {
+/* Tooltip */
+const CellTooltip = ({ children, content }) => (
+  <div className="relative group">
+    {children}
+    {content && (
+      <div className="absolute bottom-full mb-2 hidden group-hover:block px-3 py-1 text-xs text-white bg-gray-800 rounded z-50 max-w-xs break-words">
+        {content}
+      </div>
+    )}
+  </div>
+);
+
+const EditableTable = ({
+  tableData,
+  onTableUpdate,
+  viewMode = "original",
+  tableEdits = [],
+}) => {
   const [data, setData] = useState(tableData.preview || []);
   const [history, setHistory] = useState([tableData.preview || []]);
   const [historyIndex, setHistoryIndex] = useState(0);
+  const [copyMessage, setCopyMessage] = useState(null);
+  const [originalData] = useState(tableData.preview || []);
 
-  // Apply edits to original data when in edited view
+  const tableRef = useRef(null);
+  const wrapperRef = useRef(null);
+
+  /* -------- Display Data -------- */
   const displayData = useMemo(() => {
-    if (viewMode === 'original') {
-      return tableData.preview || [];
-    }
-    
-    // Apply edits to create edited view
-    const editedData = JSON.parse(JSON.stringify(tableData.preview || []));
-    tableEdits.forEach(edit => {
-      if (editedData[edit.row] && editedData[edit.row][edit.col] !== undefined) {
-        editedData[edit.row][edit.col] = edit.new_value;
-      }
+    if (viewMode === "original") return tableData.preview || [];
+    const cloned = JSON.parse(JSON.stringify(tableData.preview || []));
+    tableEdits.forEach(({ row, col, new_value }) => {
+      if (cloned[row]?.[col] !== undefined) cloned[row][col] = new_value;
     });
-    return editedData;
+    return cloned;
   }, [tableData.preview, tableEdits, viewMode]);
 
   useEffect(() => {
@@ -28,210 +45,434 @@ const EditableTable = ({ tableData, onTableUpdate, viewMode = 'original', tableE
     setHistoryIndex(0);
   }, [displayData]);
 
-  const saveToHistory = useCallback((newData) => {
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(JSON.parse(JSON.stringify(newData)));
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
-  }, [history, historyIndex]);
+  /* -------- History -------- */
+  const saveHistory = useCallback(
+    (newData) => {
+      const h = history.slice(0, historyIndex + 1);
+      h.push(JSON.parse(JSON.stringify(newData)));
+      setHistory(h);
+      setHistoryIndex(h.length - 1);
+    },
+    [history, historyIndex]
+  );
 
   const undo = () => {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1;
-      const prevData = history[newIndex];
-      setData(prevData);
-      setHistoryIndex(newIndex);
-      onTableUpdate?.(tableData.index, prevData);
-    }
+    if (historyIndex <= 0) return;
+    const idx = historyIndex - 1;
+    setData(history[idx]);
+    setHistoryIndex(idx);
+    onTableUpdate?.(tableData.index, history[idx]);
   };
 
   const redo = () => {
-    if (historyIndex < history.length - 1) {
-      const newIndex = historyIndex + 1;
-      const nextData = history[newIndex];
-      setData(nextData);
-      setHistoryIndex(newIndex);
-      onTableUpdate?.(tableData.index, nextData);
-    }
+    if (historyIndex >= history.length - 1) return;
+    const idx = historyIndex + 1;
+    setData(history[idx]);
+    setHistoryIndex(idx);
+    onTableUpdate?.(tableData.index, history[idx]);
   };
 
-  const [cellEdits, setCellEdits] = useState(new Map());
-  const [originalParagraphs, setOriginalParagraphs] = useState({});
-
-  useEffect(() => {
-    // Store original paragraphs for comparison
-    if (tableData.paragraphs) {
-      const paragraphsMap = {};
-      tableData.paragraphs.forEach((row, rowIdx) => {
-        row.forEach((cellParas, colIdx) => {
-          paragraphsMap[`${rowIdx}-${colIdx}`] = cellParas;
-        });
+  /* -------- Cell Copy -------- */
+  const copyCellContent = (content) => {
+    navigator.clipboard
+      .writeText(content)
+      .then(() => {
+        toast("Cell copied");
+      })
+      .catch(() => {
+        toast("Copy failed");
       });
-      setOriginalParagraphs(paragraphsMap);
-      console.log('Original paragraphs set:', paragraphsMap); // Debug
-    }
-  }, [tableData.paragraphs]);
+  };
 
-  const updateCell = (rowIndex, colIndex, value) => {
-    if (viewMode === 'original') return;
-    
-    const newData = [...data];
-    newData[rowIndex] = [...newData[rowIndex]];
-    newData[rowIndex][colIndex] = value;
-    setData(newData);
-    saveToHistory(newData);
-    
-    // Track individual cell edit with paragraph-aware old/new values
-    const cellKey = `${rowIndex}-${colIndex}`;
-    const originalParas = originalParagraphs[cellKey] || [];
-    const originalValue = originalParas.length > 0 ? originalParas.join('\n') : (tableData.preview?.[rowIndex]?.[colIndex] || '');
-    
-    console.log(`Cell ${cellKey}: originalParas=`, originalParas, 'originalValue=', originalValue); // Debug
-    
-    setCellEdits(prev => {
-      const newEdits = new Map(prev);
-      if (value !== originalValue) {
-        newEdits.set(cellKey, {
-          table_index: tableData.index,
-          row: rowIndex,
-          col: colIndex,
-          old_value: originalValue,
-          new_value: value
+  /* -------- Toast -------- */
+  const toast = (msg) => {
+    setCopyMessage(msg);
+    setTimeout(() => setCopyMessage(null), 2500);
+  };
+
+  /* =========================================================
+     COPY AS EDITABLE TABLE — FIXED FOR \n NEWLINES
+  ========================================================= */
+  const copyTableAsHtml = () => {
+    if (!tableRef.current || !data.length) return;
+
+    try {
+      const headers = data[0];
+      const rows = data.slice(1);
+
+      let html = `
+        <table style="border-collapse:collapse;border:1px solid #ccc;font-family:Calibri,Arial,sans-serif;font-size:11pt;width:100%;table-layout:auto;">
+          <thead>
+            <tr style="background:#f2f2f2;">
+      `;
+
+      // Headers
+      headers.forEach((header) => {
+        const safeHeader = String(header)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+        html += `<th style="border:1px solid #ccc;padding:8px 12px;font-weight:bold;text-align:left;">${safeHeader}</th>`;
+      });
+      html += `</tr></thead><tbody>`;
+
+      // Data rows
+      rows.forEach((row) => {
+        html += "<tr>";
+        row.forEach((cell) => {
+          const cellContent = String(cell || "");
+          const safeContent = cellContent
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\n/g, "<br>");
+          html += `<td style="border:1px solid #ccc;padding:8px 12px;vertical-align:top;">${safeContent}</td>`;
         });
-      } else {
-        newEdits.delete(cellKey);
+        html += "</tr>";
+      });
+
+      html += "</tbody></table>";
+
+      if (navigator.clipboard && navigator.clipboard.write) {
+        const blobHtml = new Blob([html], { type: "text/html" });
+        const blobText = new Blob([buildPlainTextTable()], {
+          type: "text/plain",
+        });
+
+        navigator.clipboard
+          .write([
+            new ClipboardItem({
+              "text/html": blobHtml,
+              "text/plain": blobText,
+            }),
+          ])
+          .then(() => {
+            toast("Table copied ✅ (newlines preserved)");
+          })
+          .catch(() => {
+            copyHtmlFallback(html);
+          });
+        return;
       }
-      
-      onTableUpdate?.(tableData.index, Array.from(newEdits.values()));
-      return newEdits;
+
+      copyHtmlFallback(html);
+    } catch (err) {
+      console.error(err);
+      toast("Copy failed");
+    }
+  };
+
+  // Plain text version (tab-separated with \n preserved)
+  const buildPlainTextTable = () => {
+    const headers = data[0];
+    const rows = data.slice(1);
+
+    let text = headers.join("\t") + "\n";
+    rows.forEach((row) => {
+      text +=
+        row
+          .map((cell) => String(cell || "").replace(/\n/g, "\\n"))
+          .join("\t") + "\n";
     });
+    return text;
   };
 
-  const addRow = () => {
-    if (viewMode === 'original') return;
-    
-    const newRow = new Array(data[0]?.length || 1).fill('');
-    const newData = [...data, newRow];
-    setData(newData);
-    saveToHistory(newData);
-    onTableUpdate?.(tableData.index, newData);
+  // Fallback for older browsers
+  const copyHtmlFallback = (html) => {
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    container.style.position = "fixed";
+    container.style.left = "-9999px";
+    document.body.appendChild(container);
+
+    const range = document.createRange();
+    range.selectNodeContents(container);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    navigator.clipboard.writeText();
+
+    selection.removeAllRanges();
+    document.body.removeChild(container);
+    toast("Table copied ✅ (newlines preserved)");
   };
 
-  const removeRow = (rowIndex) => {
-    if (viewMode === 'original' || data.length <= 1) return;
-    
-    const newData = data.filter((_, i) => i !== rowIndex);
-    setData(newData);
-    saveToHistory(newData);
-    onTableUpdate?.(tableData.index, newData);
-  };
+  /* =========================================================
+     COPY AS IMAGE — BULLETPROOF VERSION (CLEAN DOM)
+  ========================================================= */
+  const copyTableAsImage = async () => {
+    if (!data.length) return;
 
-  const addColumn = () => {
-    if (viewMode === 'original') return;
-    
-    const newData = data.map(row => [...row, '']);
-    setData(newData);
-    saveToHistory(newData);
-    onTableUpdate?.(tableData.index, newData);
-  };
+    try {
+      toast("Generating clean image...");
 
-  const removeColumn = (colIndex) => {
-    if (viewMode === 'original' || data[0]?.length <= 1) return;
-    
-    const newData = data.map(row => row.filter((_, i) => i !== colIndex));
-    setData(newData);
-    saveToHistory(newData);
-    onTableUpdate?.(tableData.index, newData);
+      const cleanTable = document.createElement("table");
+      cleanTable.style.borderCollapse = "collapse";
+      cleanTable.style.border = "1px solid #ddd";
+      cleanTable.style.fontFamily = "Arial, sans-serif";
+      cleanTable.style.fontSize = "12px";
+      cleanTable.style.width = "100%";
+      cleanTable.style.maxWidth = "1200px";
+      cleanTable.style.backgroundColor = "#ffffff";
+      cleanTable.style.tableLayout = "auto";
+
+      // Headers
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      headerRow.style.backgroundColor = "#f8f9fa";
+      data[0].forEach((header) => {
+        const th = document.createElement("th");
+        th.textContent = String(header);
+        th.style.border = "1px solid #ddd";
+        th.style.padding = "10px 12px";
+        th.style.fontWeight = "bold";
+        th.style.textAlign = "left";
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      cleanTable.appendChild(thead);
+
+      // Data rows
+      const tbody = document.createElement("tbody");
+      data.slice(1).forEach((row) => {
+        const tr = document.createElement("tr");
+        row.forEach((cell) => {
+          const td = document.createElement("td");
+          td.innerHTML = String(cell || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\n/g, "<br>");
+          td.style.border = "1px solid #ddd";
+          td.style.padding = "8px 12px";
+          td.style.verticalAlign = "top";
+          td.style.maxWidth = "300px";
+          td.style.wordWrap = "break-word";
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      cleanTable.appendChild(tbody);
+
+      const container = document.createElement("div");
+      container.style.position = "fixed";
+      container.style.top = "-9999px";
+      container.style.left = "-9999px";
+      container.style.background = "#ffffff";
+      container.style.padding = "20px";
+      container.appendChild(cleanTable);
+      document.body.appendChild(container);
+
+      const canvas = await html2canvas(container, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: false,
+        logging: false,
+        width: cleanTable.scrollWidth,
+        height: cleanTable.scrollHeight,
+      });
+
+      document.body.removeChild(container);
+
+      if (navigator.clipboard?.write && ClipboardItem) {
+        try {
+          const blob = await new Promise((resolve) =>
+            canvas.toBlob(resolve, "image/png", 1.0)
+          );
+          await navigator.clipboard.write([
+            new ClipboardItem({ "image/png": blob }),
+          ]);
+          toast("🖼️ Perfect image copied!");
+          return;
+        } catch (e) {
+          console.warn("Clipboard failed:", e);
+        }
+      }
+
+      canvas.toBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `table-${tableData.index}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast("🖼️ Image downloaded (perfect quality)");
+      });
+    } catch (err) {
+      console.error(err);
+      toast("❌ Fallback download");
+      const csvContent = data.map((row) => row.join("\t")).join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `table-${tableData.index}.csv`;
+      a.click();
+    }
   };
 
   if (!data.length) return null;
+  const headers = data[0];
+  const rows = data.slice(1);
 
   return (
-    <div className="border border-red-500 rounded-lg p-3 bg-white">
-      <div className="flex justify-between items-center mb-3">
-        <h5 className="text-sm font-medium text-slate-700">
-          Table #{tableData.index} ({data.length} × {data[0]?.length || 0})
-        </h5>
-        <div className="flex gap-4">
-          <div className='flex gap-2'>
-            <button
-              onClick={undo}
-              disabled={historyIndex <= 0}
-              className="p-1 text-slate-600 hover:bg-slate-50 hover:text-black rounded disabled:opacity-100 hover:cursor-pointer "
-              title="Undo"
-            >
-              <Undo size={18} />
-            </button>
-            <button
-              onClick={redo}
-              disabled={historyIndex >= history.length - 1}
-              className="p-1 text-slate-600 hover:bg-slate-50 rounded disabled:opacity-100 hover:cursor-pointer"
-              title="Redo"
-            >
-              <Redo size={18} />
-            </button>
+    <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+      {/* Toolbar */}
+      <div className="px-4 py-3 border-b bg-slate-50 flex justify-between">
+        <div className="flex items-center gap-2">
+          <TableIcon size={18} className="text-indigo-600" />
+          <div>
+            <div className="text-sm font-semibold">Table #{tableData.index}</div>
+            <div className="text-xs text-slate-500">
+              {rows.length} × {headers.length}
+            </div>
           </div>
+        </div>
 
-          <div className='flex gap-2'>
-            <button
-              onClick={addRow}
-              className="p-1 text-green-600 hover:bg-green-50 rounded hover:cursor-pointer"
-              title="Add row"
-            >
-              <Plus size={14} />
-            </button>
-            <button
-              onClick={addColumn}
-              className="p-1 text-blue-600 hover:bg-blue-50 rounded hover:cursor-pointer"
-              title="Add column"
-            >
-              <Plus size={14} />
-            </button>
-          </div>
+        <div className="flex gap-2">
+          <button
+            onClick={undo}
+            disabled={historyIndex === 0}
+            className="p-2 text-slate-500 hover:bg-slate-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Undo"
+          >
+            <Undo2 size={16} />
+          </button>
+          <button
+            onClick={redo}
+            disabled={historyIndex >= history.length - 1}
+            className="p-2 text-slate-500 hover:bg-slate-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Redo"
+          >
+            <Redo2 size={16} />
+          </button>
+          <button
+            onClick={copyTableAsHtml}
+            className="p-2 text-slate-500 hover:bg-emerald-100 hover:text-emerald-600 rounded"
+            title="Copy as editable table (Word/PPT)"
+          >
+            <Copy size={16} />
+          </button>
+          <button
+            onClick={copyTableAsImage}
+            className="p-2 text-slate-500 hover:bg-blue-100 hover:text-blue-600 rounded"
+            title="Copy as PNG image"
+          >
+            <Image size={16} />
+          </button>
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full border-collapse">
+      {copyMessage && (
+        <div className="px-4 py-1 text-xs bg-emerald-50 text-emerald-700">
+          {copyMessage}
+        </div>
+      )}
+
+      {/* Table */}
+      <div ref={wrapperRef} className="overflow-auto max-h-[600px]">
+        <table
+          ref={tableRef}
+          className="w-full border-collapse table-fixed"
+          
+        >
+          <colgroup>
+            {headers.map((_, i) => (
+              <col key={i} className="w-auto" />
+            ))}
+          </colgroup>
+          <thead>
+            <tr>
+              {headers.map((h, i) => (
+                <th
+                  key={i}
+                  className="border px-3 py-2 bg-slate-100 text-xs uppercase font-medium text-slate-700"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
           <tbody>
-            {data.map((row, rowIndex) => (
-              <tr key={rowIndex}>
-                {row.map((cell, colIndex) => (
-                  <td key={colIndex} className="border border-slate-300 p-1 relative group">
-                    <textarea
-                      value={cell}
-                      onChange={(e) => updateCell(rowIndex, colIndex, e.target.value)}
-                      className={`w-full min-w-[100px] px-2 py-1 text-xs border-none outline-none resize-none ${
-                        viewMode === 'original' 
-                          ? 'bg-slate-50 cursor-not-allowed' 
-                          : 'focus:bg-blue-50'
-                      }`}
-                      rows={Math.max(1, (cell.match(/\n/g) || []).length + 1)}
-                      style={{ minHeight: '24px' }}
-                      readOnly={viewMode === 'original'}
-                    />
-                    {/* Column controls */}
-                    {rowIndex === 0 && (
-                      <button
-                        onClick={() => removeColumn(colIndex)}
-                        className="absolute -top-2 -right-1 opacity-0 group-hover:opacity-100 p-0.5 bg-red-500 text-white rounded-full text-xs"
-                        title="Remove column"
-                      >
-                        <X size={10} />
-                      </button>
+            {rows.map((row, r) => (
+              <tr key={r}>
+                {row.map((cell, c) => (
+                  <td
+                    key={c}
+                    className="
+                      border
+                      px-3
+                      py-2
+                      text-sm
+                      align-top
+                      overflow-hidden
+                    "
+                  >
+                    {viewMode === "original" ? (
+                      <CellTooltip content={cell}>
+                        <div
+                          className="truncate whitespace-pre-wrap cursor-pointer hover:bg-slate-50 p-1 rounded"
+                          onDoubleClick={() => copyCellContent(cell)}
+                          title="Double-click to copy cell"
+                        >
+                          {cell}
+                        </div>
+                      </CellTooltip>
+                    ) : (
+                      <textarea
+                        ref={(el) => {
+                          if (el) {
+                            el.style.height = "auto";
+                            el.style.height = el.scrollHeight + "px";
+                          }
+                        }}
+                        value={cell}
+                        onChange={(e) => {
+                          const oldValue = data[r + 1][c];
+                          const newValue = e.target.value;
+                          const newData = [...data];
+                          newData[r + 1][c] = newValue;
+
+                          console.log("🔍 CELL EDIT DEBUG:", {
+                            tableIndex: tableData.index,
+                            row: r + 1,
+                            col: c,
+                            old_value: oldValue,
+                            new_value: newValue,
+                            original_value: originalData[r + 1]?.[c],
+                          });
+
+                          setData(newData);
+                          saveHistory(newData);
+
+                          if (oldValue !== newValue) {
+                            onTableUpdate?.(tableData.index, {
+                              row: r + 1,
+                              col: c,
+                              old_value: originalData[r + 1]?.[c] || oldValue,
+                              new_value: newValue,
+                            });
+                          }
+                        }}
+                        className="
+                          w-full
+                          resize-none
+                          overflow-hidden
+                          bg-transparent
+                          border-none
+                          outline-none
+                          p-1
+                          text-sm
+                          whitespace-pre-wrap
+                          wrap-break-word
+                          leading-relaxed
+                          focus:ring-2 focus:ring-blue-500
+                          rounded
+                        "
+                      />
                     )}
                   </td>
                 ))}
-                {/* Row controls */}
-                <td className="p-1">
-                  <button
-                    onClick={() => removeRow(rowIndex)}
-                    className="p-0.5 text-red-500 hover:bg-red-50 rounded"
-                    title="Remove row"
-                  >
-                    <Minus size={12} />
-                  </button>
-                </td>
               </tr>
             ))}
           </tbody>

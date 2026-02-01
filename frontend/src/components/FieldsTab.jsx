@@ -6,6 +6,7 @@ const FieldsTab = ({
   schemaData,
   fieldReferences,
   selectedFieldKeys,
+  selectedReferences,
   fieldHistory,
   fieldsHistory,
   newRefInputs,
@@ -15,6 +16,7 @@ const FieldsTab = ({
   newFieldName,
   highlightAll,
   onFieldSelect,
+  onReferenceSelect,
   onUndoField,
   onRedoField,
   onUndoFields,
@@ -31,6 +33,8 @@ const FieldsTab = ({
   onNewFieldNameChange,
   onCreateNewField,
   onHighlightAllToggle,
+  onCurrentFieldIndexChange,
+  onEditFieldName,
 }) => {
 
   const fieldEntries = useMemo(
@@ -41,11 +45,17 @@ const FieldsTab = ({
   const totalFields = fieldEntries.length;
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  const goPrev = () =>
-    setCurrentIndex(i => i === 0 ? totalFields - 1 : i - 1);
+  const goPrev = () => {
+    const newIndex = currentIndex === 0 ? totalFields - 1 : currentIndex - 1;
+    setCurrentIndex(newIndex);
+    onCurrentFieldIndexChange?.(newIndex);
+  };
 
-  const goNext = () =>
-    setCurrentIndex(i => i === totalFields - 1 ? 0 : i + 1);
+  const goNext = () => {
+    const newIndex = currentIndex === totalFields - 1 ? 0 : currentIndex + 1;
+    setCurrentIndex(newIndex);
+    onCurrentFieldIndexChange?.(newIndex);
+  };
 
   const currentEntry = fieldEntries[currentIndex] || [];
 
@@ -56,13 +66,13 @@ const FieldsTab = ({
 
   return (
     <>
-      <div className="flex justify-between items-center">
-        <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
           <input
             value={newFieldName}
             onChange={e => onNewFieldNameChange(e.target.value)}
             placeholder="Create new field…"
-            className="px-2 py-1 border rounded-lg outline-none"
+            className="px-2 py-1 border rounded-lg outline-none flex-1"
             onKeyDown={e => {
               if (e.key === 'Enter') {
                 onCreateNewField();
@@ -78,7 +88,7 @@ const FieldsTab = ({
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap justify-between gap-2 sm:justify-end">
           <select
             value={totalFields > 0 ? fieldEntries[currentIndex]?.[0] || '' : ''}
             onChange={e => {
@@ -86,6 +96,7 @@ const FieldsTab = ({
               const newIndex = fieldEntries.findIndex(([key]) => key === selectedFieldKey);
               if (newIndex !== -1) {
                 setCurrentIndex(newIndex);
+                onCurrentFieldIndexChange?.(newIndex);
               }
             }}
             className="
@@ -106,6 +117,7 @@ const FieldsTab = ({
               shadow-sm
               hover:border-slate-400
               truncate
+              flex-1
             "
             disabled={totalFields === 0}
           >
@@ -115,9 +127,10 @@ const FieldsTab = ({
               fieldEntries.map(([fieldKey]) => {
                 const field = schemaData?.schema?.document_fields?.fields?.[fieldKey] || {};
                 const label = field.label || fieldKey.replace(/_/g, ' ');
+                const isSelected = selectedFieldKeys.has(fieldKey);
                 return (
-                  <option key={fieldKey} value={fieldKey}>
-                    {label}
+                  <option key={fieldKey} value={fieldKey} className='flex-1'>
+                    {label} {isSelected ? '🟣' : ''}
                   </option>
                 );
               })
@@ -162,12 +175,14 @@ const FieldsTab = ({
                 onPrev={goPrev}
                 onNext={goNext}
                 selectedFieldKeys={selectedFieldKeys}
+                selectedReferences={selectedReferences}
                 fieldHistory={fieldHistory}
                 newRefInputs={newRefInputs}
                 editingRef={editingRef}
                 editRefValue={editRefValue}
                 referenceReplacements={referenceReplacements}
                 onFieldSelect={onFieldSelect}
+                onReferenceSelect={onReferenceSelect}
                 onUndoField={onUndoField}
                 onRedoField={onRedoField}
                 onDeleteField={onDeleteField}
@@ -179,6 +194,7 @@ const FieldsTab = ({
                 onUpdateReferenceReplacement={onUpdateReferenceReplacement}
                 onNewRefInputChange={onNewRefInputChange}
                 onEditRefValueChange={onEditRefValueChange}
+                onEditFieldName={onEditFieldName}
               />
               );
 })()}

@@ -80,10 +80,9 @@ if __name__ == "__main__":
         for i, table in enumerate(tables):
             print(f"\nTable {table['index']}: {table['rows']}x{table['columns']}")
             print("Preview:")
+            # print(json.dumps(table['preview'], indent=2))
             for row_idx, row in enumerate(table['preview']):  # First 3 rows
                 print(f"  Row {row_idx}: {row}")
-            # if len(table['preview']) > 3:
-            #     print(f"  ... and {len(table['preview'])-3} more rows")
     else:
         print(f"File not found: {test_docx_path}")
         print("Please update test_docx_path to point to a DOCX file with tables")

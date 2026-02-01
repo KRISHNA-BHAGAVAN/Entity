@@ -198,11 +198,10 @@ const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
           return (
             <div
               key={event.id}
-              onClick={() => editingId !== event.id && onSelectEvent(event)}
-              className={`bg-white p-5 rounded-xl border transition ${
+              className={`bg-white p-5 rounded-xl border transition group ${
                 editingId === event.id
                   ? 'ring-4 ring-indigo-50 border-indigo-400'
-                  : 'hover:border-blue-300 cursor-pointer'
+                  : 'hover:border-blue-300 hover:shadow-md'
               }`}
             >
               {editingId === event.id ? (
@@ -246,28 +245,33 @@ const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
                 <>
                   <div className="flex justify-between mb-3">
                     <Calendar className="text-blue-600" size={20} />
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={(e) => startEditing(e, event)}
-                        className="p-1.5 text-slate-400 hover:text-indigo-600"
+                        className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"
+                        title="Edit event"
                       >
-                        <Pencil size={18} />
+                        <Pencil size={16} />
                       </button>
                       <button
                         onClick={(e) => handleDelete(e, event.id)}
-                        className="p-1.5 text-slate-400 hover:text-red-500"
+                        className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
+                        title="Delete event"
                       >
-                        <Trash2 size={18} />
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </div>
 
-                  <h3 className="font-semibold text-lg">{event.name}</h3>
-                  <p className="text-sm text-slate-500 line-clamp-2">
+                  <h3 className="font-semibold text-lg mb-2">{event.name}</h3>
+                  <p className="text-sm text-slate-500 line-clamp-2 mb-4">
                     {event.description || 'No description'}
                   </p>
 
-                  <div className="mt-4 flex items-center text-sm text-blue-600 font-medium">
+                  <div 
+                    onClick={() => onSelectEvent(event)}
+                    className="flex items-center text-sm text-slate-600 font-medium hover:text-blue-600 cursor-pointer transition-colors"
+                  >
                     Manage Documents <ArrowRight size={16} className="ml-1" />
                   </div>
                 </>

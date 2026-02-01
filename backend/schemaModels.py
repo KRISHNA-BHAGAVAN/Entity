@@ -8,6 +8,7 @@ class DocumentIn(BaseModel):
 
 class SchemaDiscoveryRequest(BaseModel):
     documents: List[DocumentIn]
+    user_instructions: Optional[str] = None
 
 class TableEdit(BaseModel):
     table_index: int

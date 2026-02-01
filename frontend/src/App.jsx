@@ -1,10 +1,16 @@
+// App.jsx
 import { useState, useEffect } from "react";
-import { Routes, Route, useNavigate } from "react-router-dom";
+import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "./services/supabaseClient";
+import { ToastProvider } from "./contexts/ToastContext";
 import { Auth } from "./components/Auth";
 import Dashboard from "./pages/Dashboard";
-import EventDetail from "./pages/EventDetail";
+import Uploads from "./pages/Uploads";
+import SchemaDiscovery from "./pages/SchemaDiscovery";
+// import EventDetail from "./pages/EventDetail";
 import EntityLogo from "./components/logo";
+import PreviewPage from "./pages/PreviewPage";
+import SideMenu from "./components/SideMenu";
 
 import {
   UserCircle,
@@ -14,6 +20,7 @@ import {
 
 const App = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [session, setSession] = useState(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
   const [events, setEvents] = useState([]);
@@ -60,10 +67,16 @@ const App = () => {
   const refreshEvents = async () => {
     setLoadingEvents(true);
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("events")
         .select("*, event_schema")
         .order("created_at", { ascending: false });
+
+      if (error || !data) {
+        console.error('Failed to fetch events:', error);
+        setEvents([]);
+        return;
+      }
 
       setEvents(
         data.map((e) => ({
@@ -83,7 +96,7 @@ const App = () => {
      Navigation
   ---------------------------- */
   const handleSelectEvent = (event) => {
-    navigate(`/event/${event.id}`);
+    navigate(`/uploads?eventId=${event.id}`);
   };
 
   const goHome = () => {
@@ -116,61 +129,81 @@ const App = () => {
      UI
   ---------------------------- */
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
-      {/* Header */}
-      <header className="sticky top-0 z-30 bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <div
-            onClick={goHome}
-            className="flex items-center gap-3 cursor-pointer select-none"
-          >
-          <EntityLogo size={35} fill="currentColor" className="text-red-500" />
+    <ToastProvider>
+      <div className="min-h-screen flex flex-col bg-slate-50">
+        {/* Header */}
+        <header className="sticky top-0 z-30 bg-white border-b border-slate-200">
+          <div className="max-w-10xl px-4 sm:px-6 h-10 flex items-center justify-between">
+            <div
+              onClick={goHome}
+              className="flex items-center gap-3 cursor-pointer select-none"
+            >
+            <EntityLogo size={25} fill="currentColor" className="text-red-500" />
 
-          <span className="text-2xl font-semibold font-mono tracking-tight">
-              Entity
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-2 text-sm text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
-              <UserCircle size={16} />
-              <span className="max-w-40 truncate">
-                {session.user.email}
+            <span className="text-lg font-semibold font-mono tracking-tight">
+                Smart Documentation System
               </span>
             </div>
 
-            <button
-              onClick={handleLogout}
-              className="p-2 rounded-full text-slate-500 hover:text-red-600 hover:bg-red-50 transition hover:cursor-pointer"
-              title="Logout"
-            >
-              <LogOut size={18} />
-            </button>
-          </div>
-        </div>
-      </header>
+            <div className="flex items-center gap-3">
+              <div className="hidden md:flex items-center gap-2 text-sm text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
+                <UserCircle size={16} />
+                <span className="max-w-40 truncate">
+                  {session.user.email}
+                </span>
+              </div>
 
-      {/* Main */}
-      <main className="flex-1">
-        <Routes>
-          <Route 
-            path="/" 
-            element={
-              <Dashboard
-                events={events}
-                isLoading={loadingEvents}
-                onSelectEvent={handleSelectEvent}
-                onRefresh={refreshEvents}
+              <button
+                onClick={handleLogout}
+                className="p-2 rounded-full text-slate-500 hover:text-red-600 hover:bg-red-50 transition hover:cursor-pointer"
+                title="Logout"
+              >
+                <LogOut size={18} />
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Main Layout with Sidebar */}
+        <div className="flex flex-1">
+          {location.pathname !== '/' && <div className="w-12"></div>} {/* Spacer for fixed sidebar */}
+          {location.pathname !== '/' && <SideMenu />}
+          
+          {/* Main Content */}
+          <main className="flex-1">
+            <Routes>
+              <Route 
+                path="/" 
+                element={
+                  <Dashboard
+                    events={events}
+                    isLoading={loadingEvents}
+                    onSelectEvent={handleSelectEvent}
+                    onRefresh={refreshEvents}
+                  />
+                } 
               />
-            } 
-          />
-          <Route 
-            path="/event/:eventId" 
-            element={<EventDetail events={events} />} 
-          />
-        </Routes>
-      </main>
-    </div>
+              <Route 
+                path="/uploads" 
+                element={<Uploads />} 
+              />
+              <Route 
+                path="/schema-discovery" 
+                element={<SchemaDiscovery />} 
+              />
+              {/* <Route 
+                path="/event/:eventId" 
+                element={<EventDetail events={events} />} 
+              /> */}
+              <Route
+                path="/preview"
+                element={<PreviewPage />} 
+              />
+            </Routes>
+          </main>
+        </div>
+      </div>
+    </ToastProvider>
   );
 };
 

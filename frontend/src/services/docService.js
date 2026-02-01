@@ -1,6 +1,7 @@
 import { apiCall } from "../config/api";
 import { cacheService } from "./cacheService";
 import { supabase } from "./supabaseClient";
+
 export const generateFinalDoc = async (docId, values, docVariables, tableEdits = []) => {
   // Handle different input formats
   let replacements;
@@ -15,26 +16,15 @@ export const generateFinalDoc = async (docId, values, docVariables, tableEdits =
     ]);
   }
 
-  // Debug logging
-  console.log('\n=== GENERATE FINAL DOC DEBUG ===');
-  console.log('Doc ID:', docId);
-  console.log('Values:', values);
-  console.log('Doc Variables:', docVariables);
-  console.log('Replacements being sent:', replacements);
-  console.log('Table Edits:', tableEdits);
-  console.log('================================\n');
-
   const formData = new FormData();
   formData.append("replacements_json", JSON.stringify(replacements));
   formData.append("table_edits_json", JSON.stringify(tableEdits));
   const blob = await apiCall(`/replace-text/${docId}`, {
     method: "POST",
     body: formData,
-    isBlob: true, // Indicate that the response is a blob
+    isBlob: true,
   });
 
-  const count = blob.headers?.get("X-Total-Replacements");
-  if (count) console.log("Total replacements:", count);
   return blob;
 };
 

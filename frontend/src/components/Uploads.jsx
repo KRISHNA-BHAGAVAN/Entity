@@ -1,23 +1,59 @@
 import { useRef, useState, useEffect } from 'react';
 import { saveDoc, getDocs, deleteDoc } from '../services/storage';
-import VariableMapper from './VariableMapper';
+import { useToast } from '../contexts/ToastContext';
 import {
   Upload,
   FileText,
-  Edit3,
   Trash2,
   Loader2,
   AlertCircle,
   CheckCircle2,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 
-const TemplateManager = ({ event }) => {
+const Uploads = ({ event }) => {
   const [docs, setDocs] = useState([]);
-  const [selectedDocId, setSelectedDocId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadCount, setUploadCount] = useState(0);
+  const [history, setHistory] = useState({ past: [], future: [] });
   const fileInputRef = useRef(null);
+  const { success, error } = useToast();
+
+  const saveState = () => {
+    const currentState = JSON.parse(JSON.stringify(docs));
+    setHistory(prev => ({
+      past: [...prev.past, currentState],
+      future: []
+    }));
+  };
+
+  const undo = () => {
+    if (!history.past.length) return;
+
+    const previousState = history.past[history.past.length - 1];
+    const currentState = JSON.parse(JSON.stringify(docs));
+
+    setDocs(previousState);
+    setHistory(prev => ({
+      past: prev.past.slice(0, -1),
+      future: [currentState, ...prev.future]
+    }));
+  };
+
+  const redo = () => {
+    if (!history.future.length) return;
+
+    const nextState = history.future[0];
+    const currentState = JSON.parse(JSON.stringify(docs));
+
+    setDocs(nextState);
+    setHistory(prev => ({
+      past: [...prev.past, currentState],
+      future: prev.future.slice(1)
+    }));
+  };
 
   const loadDocs = async () => {
     setIsLoading(true);
@@ -35,91 +71,77 @@ const TemplateManager = ({ event }) => {
     loadDocs();
   }, [event.id]);
 
-const handleFileUpload = async (e) => {
-  if (!e.target.files) return;
+  const handleFileUpload = async (e) => {
+    if (!e.target.files) return;
 
-  // 1. Filter for .docx and REMOVE DUPLICATES already in the UI state
-  const existingNames = new Set(docs.map(d => d.name));
-  const newFiles = Array.from(e.target.files).filter((file) => {
-    const isDocx = file.name.endsWith('.docx');
-    const isDuplicate = existingNames.has(file.name);
-    
-    if (isDuplicate) {
-      console.warn(`Skipping duplicate file: ${file.name}`);
+    const existingNames = new Set(docs.map(d => d.name));
+    const newFiles = Array.from(e.target.files).filter((file) => {
+      const isDocx = file.name.endsWith('.docx');
+      const isDuplicate = existingNames.has(file.name);
+      
+      if (isDuplicate) {
+        console.warn(`Skipping duplicate file: ${file.name}`);
+      }
+      return isDocx && !isDuplicate;
+    });
+
+    if (newFiles.length === 0) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
     }
-    return isDocx && !isDuplicate;
-  });
 
-  if (newFiles.length === 0) {
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    return;
-  }
+    setIsUploading(true);
+    setUploadCount(newFiles.length);
 
-  setIsUploading(true);
-  setUploadCount(newFiles.length);
+    const optimisticDocs = newFiles.map((file) => ({
+      id: crypto.randomUUID(),
+      name: file.name,
+      status: 'uploading',
+      uploadDate: Date.now(),
+    }));
 
-  const optimisticDocs = newFiles.map((file) => ({
-    id: crypto.randomUUID(),
-    name: file.name,
-    variables: [],
-    status: 'uploading',
-    uploadDate: Date.now(),
-  }));
+    setDocs((prev) => [...optimisticDocs, ...prev]);
 
-  setDocs((prev) => [...optimisticDocs, ...prev]);
+    try {
+      await Promise.all(
+        newFiles.map(async (file, index) => {
+          const tempId = optimisticDocs[index].id;
+          try {
+            const docMetadata = {
+              eventId: event.id,
+              name: file.name,
+            };
 
-  try {
-    await Promise.all(
-      newFiles.map(async (file, index) => {
-        const tempId = optimisticDocs[index].id;
-        try {
-          const docMetadata = {
-            eventId: event.id,
-            name: file.name,
-          };
+            const finalId = await saveDoc(docMetadata, file);
 
-          // saveDoc will hit Supabase Storage
-          const finalId = await saveDoc(docMetadata, file);
+            setDocs((prev) =>
+              prev.map((d) =>
+                d.id === tempId
+                  ? { ...d, id: String(finalId), status: 'complete' }
+                  : d
+              )
+            );
 
-          setDocs((prev) =>
-            prev.map((d) =>
-              d.id === tempId
-                ? { ...d, id: String(finalId), status: 'complete' } // Ensure ID is a string
-                : d
-            )
-          );
-
-        } catch (err) {
-          // 2. Handle Supabase "Asset Already Exists" error gracefully
-          if (err.message?.includes('Asset Already Exists') || err.status === 400) {
-             console.log("File already exists in storage, skipping update.");
-          } else {
-             console.error(`Upload failed for ${file.name}`, err);
+          } catch (err) {
+            if (err.message?.includes('Asset Already Exists') || err.status === 400) {
+               console.log("File already exists in storage, skipping update.");
+            } else {
+               console.error(`Upload failed for ${file.name}`, err);
+            }
+            setDocs((prev) => prev.filter((d) => d.id !== tempId));
           }
-          // Remove from UI if it failed or was a storage duplicate
-          setDocs((prev) => prev.filter((d) => d.id !== tempId));
-        }
-      })
-    );
-  } finally {
-    setIsUploading(false);
-    setUploadCount(0);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  }
-};
-
-
-  const handleUpdateDocs = async (updatedDocs) => {
-    const newDocsMap = new Map(docs.map((d) => [d.id, d]));
-    updatedDocs.forEach((d) =>
-      newDocsMap.set(d.id, { ...d, status: 'complete' })
-    );
-    setDocs(Array.from(newDocsMap.values()));
-    setTimeout(loadDocs, 500);
+        })
+      );
+    } finally {
+      setIsUploading(false);
+      setUploadCount(0);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const handleDelete = async (id) => {
-    if (confirm('Delete this template?')) {
+    if (confirm('Delete this file?')) {
+      saveState();
       const previousDocs = [...docs];
       setDocs(docs.filter((d) => d.id !== id));
 
@@ -128,13 +150,14 @@ const handleFileUpload = async (e) => {
       } catch (err) {
         console.error('Delete failed', err);
         setDocs(previousDocs);
-        alert('Failed to delete from server.');
+        error('Failed to delete from server.');
       }
     }
   };
 
   const handleDeleteAll = async () => {
-    if (confirm('Delete all templates?')) {
+    if (confirm('Delete all files?')) {
+      saveState();
       const previousDocs = [...docs];
       setDocs([]);
 
@@ -143,7 +166,7 @@ const handleFileUpload = async (e) => {
       } catch (err) {
         console.error('Mass delete failed', err);
         setDocs(previousDocs);
-        alert('Some files could not be deleted.');
+        error('Some files could not be deleted.');
       }
     }
   };
@@ -151,13 +174,13 @@ const handleFileUpload = async (e) => {
   const uploadingDocs = docs.filter((d) => d.status === 'uploading').length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-10 border">
       {/* Upload Area */}
       <div className="space-y-2">
         <div
           role="button"
           tabIndex={0}
-          aria-label="Upload ERD .docx documents"
+          aria-label="Upload .docx documents"
           className={`border-2 border-dashed rounded-xl px-4 py-6 sm:px-8 sm:py-8 text-center bg-slate-50 transition-all flex flex-col items-center justify-center gap-2 sm:gap-3 outline-none
             ${
               isUploading
@@ -182,8 +205,8 @@ const handleFileUpload = async (e) => {
           <div>
             <h3 className="text-base sm:text-lg font-semibold text-slate-700">
               {isUploading
-                ? 'Uploading templates...'
-                : 'Upload ERD Documents'}
+                ? 'Uploading files...'
+                : 'Upload Documents'}
             </h3>
             <p className="text-slate-500 text-xs sm:text-sm mt-1">
               Click to browse or drop .docx files here. Multiple files
@@ -208,7 +231,7 @@ const handleFileUpload = async (e) => {
         </div>
         {uploadCount > 0 && (
           <p className="text-xs text-slate-500 text-right">
-            Queued {uploadCount} new template
+            Queued {uploadCount} new file
             {uploadCount > 1 ? 's' : ''}.
           </p>
         )}
@@ -218,19 +241,37 @@ const handleFileUpload = async (e) => {
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h3 className="text-base sm:text-lg font-semibold text-slate-800 flex items-center gap-2">
-            Available Templates
+            Uploaded Files
             <span className="text-xs sm:text-sm font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
               {docs.length}
             </span>
           </h3>
-          {docs.length > 0 && (
+          <div className="flex items-center gap-2">
             <button
-              className="self-start sm:self-auto text-xs font-medium flex items-center gap-2 border border-red-200 rounded-md px-3 py-1.5 text-red-500 hover:bg-red-50 transition-colors"
-              onClick={handleDeleteAll}
+              onClick={undo}
+              disabled={!history.past.length}
+              className="p-2 rounded-md border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Undo"
             >
-              Delete All <Trash2 size={14} />
+              <Undo2 size={16} />
             </button>
-          )}
+            <button
+              onClick={redo}
+              disabled={!history.future.length}
+              className="p-2 rounded-md border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Redo"
+            >
+              <Redo2 size={16} />
+            </button>
+            {docs.length > 0 && (
+              <button
+                className="text-xs font-medium flex items-center gap-2 border border-red-200 rounded-md px-3 py-1.5 text-red-500 hover:bg-red-50 transition-colors"
+                onClick={handleDeleteAll}
+              >
+                Delete All <Trash2 size={14} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* List / Empty / Loading */}
@@ -241,7 +282,7 @@ const handleFileUpload = async (e) => {
         ) : docs.length === 0 ? (
           <div className="border border-dashed border-slate-200 rounded-lg py-6 px-4 text-center">
             <p className="text-slate-400 text-sm italic">
-              No templates uploaded yet. Start by adding a .docx file
+              No files uploaded yet. Start by adding a .docx file
               above.
             </p>
           </div>
@@ -284,7 +325,7 @@ const handleFileUpload = async (e) => {
                       <div className="flex items-center gap-1 mt-1">
                         {doc.status === 'uploading' ? (
                           <span className="text-[10px] font-semibold text-blue-500 uppercase tracking-wide">
-                            Sending...
+                            Uploading...
                           </span>
                         ) : doc.status === 'error' ? (
                           <span className="text-[11px] font-semibold text-red-500 flex items-center gap-1">
@@ -297,7 +338,7 @@ const handleFileUpload = async (e) => {
                               size={10}
                               className="text-green-500"
                             />
-                            {doc.variables?.length || 0} variables
+                            Uploaded
                           </span>
                         )}
                       </div>
@@ -307,42 +348,19 @@ const handleFileUpload = async (e) => {
                     <button
                       onClick={() => handleDelete(doc.id)}
                       className="text-slate-400 hover:text-red-500 transition-colors p-1"
-                      aria-label={`Delete template ${doc.name}`}
+                      aria-label={`Delete file ${doc.name}`}
                     >
                       <Trash2 size={16} />
                     </button>
                   )}
                 </div>
-
-                <button
-                  onClick={() => setSelectedDocId(doc.id)}
-                  disabled={doc.status !== 'complete'}
-                  className={`mt-auto w-full py-2 px-3 border rounded-md text-xs sm:text-sm font-medium flex items-center justify-center gap-2 transition-all
-                    ${
-                      doc.status === 'complete'
-                        ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 hover:border-blue-300 hover:cursor-pointer'
-                        : 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
-                    }`}
-                >
-                  <Edit3 size={14} />
-                  Map Variables
-                </button>
               </div>
             ))}
           </div>
         )}
       </div>
-
-      {selectedDocId && (
-        <VariableMapper
-          docs={docs}
-          initialDocId={selectedDocId}
-          onUpdateDocs={handleUpdateDocs}
-          onClose={() => setSelectedDocId(null)}
-        />
-      )}
     </div>
   );
 };
 
-export default TemplateManager;
+export default Uploads;
