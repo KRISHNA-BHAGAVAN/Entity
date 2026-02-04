@@ -188,6 +188,7 @@ Thumbs.db
 # Project specific
 current_state.png
 .blackboxrules
+.agent
 .amazonq
 .amazonq/rules
 .amazonq/rules/consider.md

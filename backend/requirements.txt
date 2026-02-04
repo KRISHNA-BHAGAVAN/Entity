@@ -1,8 +1,10 @@
 langchain
-langserve
+langgraph
 pydantic
 python-dotenv
 fastapi
+uvicorn
+langchain-openai
 langchain-google-genai
 langchain-groq
 sse_starlette
@@ -14,3 +16,6 @@ PyJWT
 redis
 rapidfuzz
 tiktoken
+cryptography
+requests
+openpyxl

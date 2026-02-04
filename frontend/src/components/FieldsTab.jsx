@@ -129,8 +129,9 @@ const FieldsTab = ({
                 const label = field.label || fieldKey.replace(/_/g, ' ');
                 const isSelected = selectedFieldKeys.has(fieldKey);
                 return (
+                  
                   <option key={fieldKey} value={fieldKey} className='flex-1'>
-                    {label} {isSelected ? '🟣' : ''}
+                    {label} {isSelected ? <span className="w-2 h-2 rounded-full bg-indigo-500"></span> : ''}
                   </option>
                 );
               })

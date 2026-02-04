@@ -3,7 +3,7 @@ from datetime import datetime
 import os
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header, BackgroundTasks
-from typing import Dict, Any, Optional
+from typing import List, Dict, Any, Optional
 from fastapi.responses import StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -16,6 +16,12 @@ from storage_service import (
 )
 from schemaModels import SchemaDiscoveryRequest
 from schemaAgent import  schema_discovery_workflow, INITIAL_STATS
+from byok_endpoints import byok_router
+from byok_service import key_broker
+from report_service import (
+    get_report_columns, update_report_columns, 
+    generate_report_preview, resolve_event_with_docs, finalize_report_excel
+)
 
 # Set up the FastAPI app and add routes
 app = FastAPI(
@@ -32,6 +38,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include BYOK router
+app.include_router(byok_router)
 
 # JWT Token extraction
 def get_jwt_token(authorization: Optional[str] = Header(None)):
@@ -113,6 +122,7 @@ class Event(BaseModel):
     name: str
     description: str
     createdAt: str
+    eventDate: Optional[str] = None
 
 class Variable(BaseModel):
     variableName: str
@@ -332,9 +342,54 @@ async def manual_extract(doc_id: str, token: Optional[str] = Depends(get_jwt_tok
 
 
 @app.post("/discover-schema")
-async def discover_schema(req: SchemaDiscoveryRequest):
+async def discover_schema(req: SchemaDiscoveryRequest, token: Optional[str] = Depends(get_jwt_token)):
     if not req.documents:
         raise HTTPException(status_code=400, detail="No documents provided")
+    
+    # Get user ID for BYOK
+    user_id = None
+    if token:
+        try:
+            supabase = get_user_supabase_client(token)
+            user = supabase.auth.get_user()
+            user_id = user.user.id
+        except Exception:
+            pass
+    
+    # Get LLM instance using BYOK with strict enforcement
+    try:
+        llm_instance, key_metadata = key_broker.get_llm_for_user(
+            user_id=user_id or "anonymous",
+            provider="groq",  # Default to Groq
+            model="llama-3.3-70b-versatile",
+            jwt_token=token,
+            strict_byok=True,  # Enforce BYOK
+            temperature=0
+        )
+    except ValueError as e:
+        error_msg = str(e)
+        if "BYOK_REQUIRED" in error_msg:
+            raise HTTPException(
+                status_code=403, 
+                detail={
+                    "error": "BYOK_REQUIRED",
+                    "message": "Please add your API key in Settings to use AI features.",
+                    "action": "setup_keys"
+                }
+            )
+        elif "BYOK_SETUP_REQUIRED" in error_msg:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "BYOK_SETUP_REQUIRED", 
+                    "message": "No API keys available. Please add your API key in Settings.",
+                    "action": "setup_keys"
+                }
+            )
+        else:
+            raise HTTPException(status_code=500, detail=f"Failed to initialize LLM: {error_msg}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to initialize LLM: {str(e)}")
 
     doc_tuples = [(doc.filename, doc.markdown) for doc in req.documents]
     doc_paths = [doc.docx_path for doc in req.documents if doc.docx_path]
@@ -356,25 +411,34 @@ async def discover_schema(req: SchemaDiscoveryRequest):
             except Exception as e:
                 print(f"Error extracting tables from {doc.filename}: {e}")
 
-    # Pass optional user_instructions; can be None/empty
+    # Pass LLM instance and user context to workflow
     result = schema_discovery_workflow.invoke(
         {
             "documents": doc_tuples,
             "doc_paths": doc_paths,
             "stats": INITIAL_STATS.copy(),
             "user_instructions": req.user_instructions,
+            "user_id": user_id,
+            "jwt_token": token,
+            "llm_instance": llm_instance,
         }
     )
 
     stats = result.get("stats", INITIAL_STATS)
 
+    # Add key source info to response
     response: Dict[str, Any] = {
         "schema": result.get("final_schema", {}),
         "tables": tables_data,
         "stats": stats,
+        "key_info": key_metadata,
         "message": "✅ Cache hit!" if stats.get("cache_hit") else
         f"✅ Generated from {stats.get('docs_processed', 0)} docs",
     }
+    
+    # Add warning if using fallback keys
+    if key_metadata.get('fallback_used'):
+        response["warning"] = "Using system fallback API keys. Add your own keys in Settings for better control."
 
     llm_summary = stats.get("llm", {}).get("summary", {})
     if llm_summary.get("llm_calls", 0) > 0:
@@ -388,6 +452,154 @@ async def discover_schema(req: SchemaDiscoveryRequest):
     return response
 
     
+# ------------------------------------------------------------------------------
+# REPORT ENDPOINTS
+# ------------------------------------------------------------------------------
+
+@app.get("/report/columns")
+async def get_columns(token: Optional[str] = Depends(get_jwt_token)):
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    try:
+        return {"columns": get_report_columns(token)}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ColumnsUpdate(BaseModel):
+    columns: List[Dict[str, Any]]
+
+@app.post("/report/columns")
+async def update_columns(data: ColumnsUpdate, token: Optional[str] = Depends(get_jwt_token)):
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    try:
+        return {"columns": update_report_columns(data.columns, token)}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ReportGenerateRequest(BaseModel):
+    start_date: str
+    end_date: str
+    columns: List[Dict[str, Any]] # name and description
+
+@app.post("/report/generate")
+async def generate_report(req: ReportGenerateRequest, token: Optional[str] = Depends(get_jwt_token)):
+    try:
+        # Get LLM API Key via BYOK
+        # We need the KEY string itself for the agent, not the LangChain object
+        # So we use the broker to get metadata, but for now we might need to expose the raw key safely
+        # OR better: Refactor report_service to use the broker internally.
+        # For this MVP, let's extract the key if possible or modify key_broker to return it.
+        
+        # HACK: For MVP, we'll get the key from the request header if provided, 
+        # or fetch from DB via our encryption service if we can.
+        # But `report_service.py` calls `report_agent` which needs an API key. 
+        # Let's use `key_broker` here to get the key.
+        
+        supabase = get_user_supabase_client(token)
+        user_id = supabase.auth.get_user().user.id
+        
+        # We need the RAW key for the agent node (or pass the LLM object).
+        # Our `ReportAgent` graph creates the LLM inside the node using `api_key`.
+        # This means we need to pass the decrypted key string.
+        
+        # We can implement a helper in `byok_service` to get the key string safely.
+        # For now, let's modify `key_broker` or add a method there.
+        # Checking `byok_service.py` (assumed) or implementing logic here:
+        
+        # 1. Try to fetch requested provider (default openai)
+        key_record = supabase.table('llm_api_keys').select('*').eq('user_id', user_id).eq('provider', 'openai').execute()
+        
+        api_key = None
+        provider = 'openai'
+        
+        if key_record.data and len(key_record.data) > 0:
+            from byok_encryption import byok_crypto
+            api_key = byok_crypto.decrypt_api_key(key_record.data[0]['encrypted_key'])
+            provider = key_record.data[0]['provider']
+        else:
+            # 2. Fallback: Get any available key (e.g. groq, gemini) if openai is missing
+            all_keys = supabase.table('llm_api_keys').select('*').eq('user_id', user_id).execute()
+            if all_keys.data and len(all_keys.data) > 0:
+                from byok_encryption import byok_crypto
+                # Pick the first one
+                api_key = byok_crypto.decrypt_api_key(all_keys.data[0]['encrypted_key'])
+                provider = all_keys.data[0]['provider']
+                print(f"DEBUG: Using fallback provider '{provider}' for report generation")
+            else:
+                 raise HTTPException(
+                     status_code=400, 
+                     detail="No LLM API Key found. Please set an API key in Settings -> BYOK Settings."
+                 )
+             
+        if not api_key:
+             raise HTTPException(status_code=403, detail="Failed to retrieve API Key.")
+
+        result = generate_report_preview(
+            req.start_date, 
+            req.end_date,
+            req.columns, 
+            token, 
+            llm_api_key=api_key,
+            llm_provider=provider
+        )
+        return result
+    except Exception as e:
+        print(f"Report generation error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ReportResolveRequest(BaseModel):
+    event_id: str
+    doc_ids: List[str]
+    missing_columns: List[str]
+
+@app.post("/report/resolve")
+async def resolve_report(req: ReportResolveRequest, token: Optional[str] = Depends(get_jwt_token)):
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    try:
+        resolved_data = resolve_event_with_docs(
+            req.event_id, 
+            req.doc_ids, 
+            req.missing_columns, 
+            token
+        )
+        return {"resolved_data": resolved_data}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ReportDownloadRequest(BaseModel):
+    columns: List[str]
+    rows: List[Dict[str, Any]]
+    start_date: str
+    end_date: str
+
+@app.post("/report/download")
+async def download_report(req: ReportDownloadRequest):
+    try:
+        # Finalize report can use the date range instead of time_range
+        time_desc = f"{req.start_date}_to_{req.end_date}"
+        excel_bytes = finalize_report_excel(req.columns, req.rows, time_desc)
+        filename = f"Report_{time_desc}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        
+        return Response(
+            content=excel_bytes,
+            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)

@@ -19,7 +19,8 @@ export const getEvents = async () => {
     id: e.id,
     name: e.name,
     description: e.description,
-    createdAt: new Date(e.createdAt).getTime()
+    createdAt: new Date(e.createdAt).getTime(),
+    eventDate: e.eventDate // Keep as string (ISO or YYYY-MM-DD) or convert as needed
   }));
 };
 
@@ -31,7 +32,8 @@ export const saveEvent = async (event) => {
       id: event.id,
       name: event.name,
       description: event.description,
-      createdAt: new Date(event.createdAt).toISOString()
+      createdAt: new Date(event.createdAt).toISOString(),
+      eventDate: event.eventDate
     })
   });
 };
@@ -44,7 +46,7 @@ export const deleteEvent = async (id) => {
 export const getDocs = async (eventId) => {
   const url = eventId ? `/docs?event_id=${eventId}` : '/docs';
   const response = await apiCall(url);
-  
+
   return response.docs.map(d => ({
     id: d.id,
     eventId: d.eventId,
@@ -76,14 +78,14 @@ export const saveDoc = async (doc, fileBlob) => {
 
   // NEW UPLOAD STEP
   const urlData = await apiCall(
-    `/docs/upload-url?name=${encodeURIComponent(doc.name)}&event_id=${doc.eventId}`, 
+    `/docs/upload-url?name=${encodeURIComponent(doc.name)}&event_id=${doc.eventId}`,
     { method: 'POST' }
   );
 
   if (urlData.status === 'exists') {
     console.log("File already exists, skipping storage upload.");
     // Optionally call confirm to ensure DB is synced, or just return existing ID
-    return urlData.doc_id; 
+    return urlData.doc_id;
   }
 
   const { upload_url, file_path, doc_id } = urlData;
@@ -99,11 +101,11 @@ export const saveDoc = async (doc, fileBlob) => {
 
   const confirmData = await apiCall('/docs/confirm', {
     method: 'POST',
-    body: JSON.stringify({ 
-      ...doc, 
-      id: doc_id, 
+    body: JSON.stringify({
+      ...doc,
+      id: doc_id,
       file_path: file_path,
-      eventId: doc.eventId || doc.event_id 
+      eventId: doc.eventId || doc.event_id
     })
   });
 

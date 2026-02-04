@@ -63,11 +63,12 @@ export const apiCall = async (endpoint, options = {}) => {
     if (!response.ok) {
       // 4. Enhanced error reporting
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        `API Error: ${response.status} ${response.statusText} - ${
-          errorData.detail || "No detail"
-        }`
+      const error = new Error(
+        `API Error: ${response.status} ${response.statusText}`
       );
+      error.status = response.status;
+      error.detail = errorData.detail;
+      throw error;
     }
 
     if (options.isBlob) {

@@ -19,6 +19,15 @@ export const discoverSchema = async (documents, userInstructions = null) => {
     return data;
   } catch (error) {
     console.error("Schema discovery failed:", error);
+    
+    // Check for BYOK-specific errors
+    if (error.status === 403 && error.detail?.error) {
+      const byokError = new Error(error.detail.message || "API key required");
+      byokError.code = error.detail.error;
+      byokError.action = error.detail.action;
+      throw byokError;
+    }
+    
     throw error;
   }
 };

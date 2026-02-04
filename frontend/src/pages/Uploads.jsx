@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 import { saveDoc, getDocs, deleteDoc } from '../services/storage';
 import {
@@ -12,8 +12,12 @@ import {
   Undo2,
   Redo2,
 } from 'lucide-react';
+import { useToast } from '../contexts/ToastContext';
+import ConfirmModal from '../components/ConfirmModal';
+
 
 const Uploads = () => {
+  const toast = useToast();
   const [searchParams] = useSearchParams();
   const eventId = searchParams.get('eventId');
 
@@ -24,6 +28,23 @@ const Uploads = () => {
   const [uploadCount, setUploadCount] = useState(0);
   const [history, setHistory] = useState({ past: [], future: [] });
   const fileInputRef = useRef(null);
+
+  // Deletion Confirmation State
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => { },
+    type: 'danger'
+  });
+
+
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!eventId) {
+      navigate('/');
+    }
+  }, [eventId]);
 
   useEffect(() => {
     const loadEventAndDocs = async () => {
@@ -158,37 +179,55 @@ const Uploads = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (confirm('Delete this file?')) {
-      saveState();
-      const previousDocs = [...docs];
-      setDocs(docs.filter((d) => d.id !== id));
+  const handleDelete = (id) => {
+    const doc = docs.find(d => d.id === id);
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete File',
+      message: `Are you sure you want to delete "${doc?.name || 'this file'}"? This action cannot be easily undone once deleted from cloud storage.`,
+      type: 'danger',
+      onConfirm: async () => {
+        saveState();
+        const previousDocs = [...docs];
+        setDocs(docs.filter((d) => d.id !== id));
 
-      try {
-        await deleteDoc(id);
-      } catch (err) {
-        console.error('Delete failed', err);
-        setDocs(previousDocs);
-        alert('Failed to delete from server.');
+        try {
+          await deleteDoc(id);
+          toast.success('File deleted successfully.');
+        } catch (err) {
+          console.error('Delete failed', err);
+          setDocs(previousDocs);
+          toast.error('Failed to delete from server.');
+        }
       }
-    }
+    });
   };
 
-  const handleDeleteAll = async () => {
-    if (confirm('Delete all files?')) {
-      saveState();
-      const previousDocs = [...docs];
-      setDocs([]);
+  const handleDeleteAll = () => {
+    if (docs.length === 0) return;
 
-      try {
-        await Promise.all(previousDocs.map((doc) => deleteDoc(doc.id)));
-      } catch (err) {
-        console.error('Mass delete failed', err);
-        setDocs(previousDocs);
-        alert('Some files could not be deleted.');
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete All Files',
+      message: `Are you sure you want to delete ALL ${docs.length} files? This will permanently remove them from cloud storage.`,
+      type: 'danger',
+      onConfirm: async () => {
+        saveState();
+        const previousDocs = [...docs];
+        setDocs([]);
+
+        try {
+          await Promise.all(previousDocs.map((doc) => deleteDoc(doc.id)));
+          toast.success('All files deleted successfully.');
+        } catch (err) {
+          console.error('Mass delete failed', err);
+          setDocs(previousDocs);
+          toast.error('Some files could not be deleted.');
+        }
       }
-    }
+    });
   };
+
 
   const uploadingDocs = docs.filter((d) => d.status === 'uploading').length;
 
@@ -223,10 +262,9 @@ const Uploads = () => {
             tabIndex={0}
             aria-label="Upload .docx documents"
             className={`border-2 border-dashed rounded-xl px-4 py-6 sm:px-8 sm:py-8 text-center bg-slate-50 transition-all flex flex-col items-center justify-center gap-2 sm:gap-3 outline-none
-              ${
-                isUploading
-                  ? 'border-blue-300 bg-blue-50/40 cursor-wait'
-                  : 'hover:bg-blue-50 hover:border-blue-400 cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-400'
+              ${isUploading
+                ? 'border-blue-300 bg-blue-50/40 cursor-wait'
+                : 'hover:bg-blue-50 hover:border-blue-400 cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-400'
               }`}
             onClick={() => !isUploading && fileInputRef.current?.click()}
             onKeyDown={(e) => {
@@ -331,22 +369,20 @@ const Uploads = () => {
                     <div
                       key={doc.id}
                       className={`bg-white border rounded-lg p-4 shadow-sm transition-all flex flex-col h-full
-                        ${
-                          doc.status === 'uploading'
-                            ? 'border-blue-200 animate-pulse'
-                            : 'border-slate-200 hover:shadow-md'
+                        ${doc.status === 'uploading'
+                          ? 'border-blue-200 animate-pulse'
+                          : 'border-slate-200 hover:shadow-md'
                         }`}
                     >
                       <div className="flex items-start justify-between gap-2 mb-3">
                         <div className="flex items-start gap-3 min-w-0">
                           <div
-                            className={`p-2 rounded-lg shrink-0 ${
-                              doc.status === 'error'
-                                ? 'bg-red-100 text-red-600'
-                                : doc.status === 'uploading'
+                            className={`p-2 rounded-lg shrink-0 ${doc.status === 'error'
+                              ? 'bg-red-100 text-red-600'
+                              : doc.status === 'uploading'
                                 ? 'bg-blue-50 text-blue-400'
                                 : 'bg-blue-100 text-blue-700'
-                            }`}
+                              }`}
                           >
                             {doc.status === 'uploading' ? (
                               <Loader2 size={22} className="animate-spin" />
@@ -401,8 +437,18 @@ const Uploads = () => {
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type={confirmModal.type}
+      />
     </div>
   );
 };
+
 
 export default Uploads;

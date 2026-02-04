@@ -157,11 +157,8 @@ def get_token_count(text: str) -> int:
 
 load_dotenv(override=True)
 
-llm = init_chat_model(
-    model="llama-3.3-70b-versatile",
-    temperature=0,
-    model_provider="groq",
-)
+# LLM will be initialized per-request using BYOK
+llm = None
 
 try:
     redis_client = redis.Redis(
@@ -190,6 +187,10 @@ class SchemaDiscoveryState(TypedDict, total=False):
     stats: Dict[str, Any]
     # user-provided extraction instructions (optional)
     user_instructions: Optional[str]
+    # BYOK integration
+    user_id: Optional[str]
+    jwt_token: Optional[str]
+    llm_instance: Optional[Any]
 
 
 INITIAL_STATS: Dict[str, Any] = {
@@ -431,6 +432,11 @@ def map_discover_schema(state: SchemaDiscoveryState) -> Dict[str, Any]:
     """
     partials: List[Dict[str, Any]] = []
     stats = state.get("stats", INITIAL_STATS.copy())
+    
+    # Get LLM instance from state (BYOK)
+    llm_instance = state.get("llm_instance")
+    if not llm_instance:
+        raise ValueError("No LLM instance available")
 
     user_instructions_raw = state.get("user_instructions") or ""
     user_instructions_for_prompt = user_instructions_raw.strip()
@@ -456,7 +462,7 @@ def map_discover_schema(state: SchemaDiscoveryState) -> Dict[str, Any]:
             prompt_tokens = get_token_count(full_prompt)
             start_time = time.time()
 
-            response = llm.invoke(
+            response = llm_instance.invoke(
                 [
                     SystemMessage(content=prompt),
                     HumanMessage(content=content),
@@ -612,6 +618,11 @@ def consolidate_entities_llm(state: SchemaDiscoveryState) -> Dict[str, Any]:
     final_schema = state.get("final_schema", {})
     if not final_schema:
         return {}
+    
+    # Get LLM instance from state (BYOK)
+    llm_instance = state.get("llm_instance")
+    if not llm_instance:
+        raise ValueError("No LLM instance available")
 
     document_fields_section = final_schema.get("document_fields", {})
     fields = document_fields_section.get("fields", {}) or {}
@@ -631,7 +642,7 @@ def consolidate_entities_llm(state: SchemaDiscoveryState) -> Dict[str, Any]:
     prompt_tokens = get_token_count(prompt)
 
     start_time = time.time()
-    response = llm.invoke(
+    response = llm_instance.invoke(
         [
             SystemMessage(content=prompt),
             HumanMessage(content="Return only the consolidated JSON."),

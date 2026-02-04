@@ -10,16 +10,22 @@ import {
   Check,
   X,
 } from 'lucide-react';
+import { useToast } from '../contexts/ToastContext';
+import ConfirmModal from './ConfirmModal';
+
 
 const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
+  const toast = useToast();
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newDate, setNewDate] = useState(''); // YYYY-MM-DD
 
   // Edit State
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
+  const [editDate, setEditDate] = useState('');
 
   /**
    * savingKey can be:
@@ -28,6 +34,11 @@ const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
    * - null
    */
   const [savingKey, setSavingKey] = useState(null);
+
+  // Deletion State
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [eventToDelete, setEventToDelete] = useState(null);
+
 
   /* ---------------- CREATE ---------------- */
   const handleCreate = async (e) => {
@@ -42,17 +53,19 @@ const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
         name: newName,
         description: newDesc,
         createdAt: new Date().toISOString(),
+        eventDate: newDate || null,
       };
 
       await saveEvent(newEvent);
 
       setNewName('');
       setNewDesc('');
+      setNewDate('');
       setIsCreating(false);
       onRefresh();
     } catch (err) {
       console.error('Failed to create event:', err);
-      alert('Failed to create event. Please try again.');
+      toast.error('Failed to create event. Please try again.');
     } finally {
       setSavingKey(null);
     }
@@ -70,6 +83,7 @@ const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
         name: editName,
         description: editDesc,
         createdAt: new Date(originalCreatedAt).toISOString(),
+        eventDate: editDate || null,
       };
 
       await saveEvent(updatedEvent);
@@ -78,7 +92,7 @@ const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
       onRefresh();
     } catch (err) {
       console.error('Failed to update event:', err);
-      alert('Failed to update event.');
+      toast.error('Failed to update event.');
     } finally {
       setSavingKey(null);
     }
@@ -89,6 +103,17 @@ const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
     setEditingId(event.id);
     setEditName(event.name);
     setEditDesc(event.description);
+
+    // Ensure the date is in YYYY-MM-DD format for the input[type="date"]
+    let formattedDate = '';
+    if (event.eventDate) {
+      formattedDate = event.eventDate.split('T')[0];
+    } else if (event.createdAt) {
+      // Fallback to creation date if eventDate is not set
+      formattedDate = new Date(event.createdAt).toISOString().split('T')[0];
+    }
+
+    setEditDate(formattedDate);
   };
 
   const cancelEditing = (e) => {
@@ -97,18 +122,27 @@ const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
   };
 
   /* ---------------- DELETE ---------------- */
-  const handleDelete = async (e, id) => {
+  const handleDeleteClick = (e, id) => {
     e.stopPropagation();
-    if (!confirm('Are you sure? This will delete all associated documents.')) return;
+    setEventToDelete(id);
+    setShowConfirmModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!eventToDelete) return;
 
     try {
-      await deleteEvent(id);
+      await deleteEvent(eventToDelete);
       onRefresh();
+      toast.success('Event deleted successfully.');
     } catch (err) {
       console.error('Failed to delete event:', err);
-      alert('Failed to delete event.');
+      toast.error('Failed to delete event.');
+    } finally {
+      setEventToDelete(null);
     }
   };
+
 
   /* ---------------- LOADING ---------------- */
   if (isLoading) {
@@ -144,18 +178,27 @@ const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
 
       {/* Create Form */}
       {isCreating && (
-        <div className="bg-white p-6 rounded-xl shadow-lg mb-8 border">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-xl shadow-lg mb-8 border w-fit">
           <h2 className="text-xl font-bold mb-6">New Event</h2>
 
           <form onSubmit={handleCreate} className="space-y-5">
-            <input
-              name="event_name"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Event name"
-              className="w-full px-4 py-3 border rounded-lg"
-              autoFocus
-            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <input
+                name="event_name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Event name"
+                className="w-full px-4 py-3 border rounded-lg outline-none"
+                autoFocus
+              />
+              <input
+                type="date"
+                name="event_date"
+                value={newDate}
+                onChange={(e) => setNewDate(e.target.value)}
+                className="w-full px-4 py-3 border rounded-lg text-slate-600 outline-none"
+              />
+            </div>
 
             <textarea
               name='description of the event'
@@ -163,7 +206,7 @@ const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
               onChange={(e) => setNewDesc(e.target.value)}
               placeholder="Description (optional)"
               rows={3}
-              className="w-full px-4 py-3 border rounded-lg resize-none"
+              className="w-full px-4 py-3 border rounded-lg resize-none outline-none"
             />
 
             <div className="flex justify-end gap-3">
@@ -198,25 +241,34 @@ const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
           return (
             <div
               key={event.id}
-              className={`bg-white p-5 rounded-xl border transition group ${
-                editingId === event.id
-                  ? 'ring-4 ring-indigo-50 border-indigo-400'
-                  : 'hover:border-blue-300 hover:shadow-md'
-              }`}
+              className={`bg-white p-5 rounded-xl border transition group ${editingId === event.id
+                ? 'ring-4 ring-indigo-50 border-indigo-400'
+                : 'hover:border-blue-300 hover:shadow-md'
+                }`}
             >
               {editingId === event.id ? (
                 // EDIT MODE
                 <div onClick={(e) => e.stopPropagation()} className="space-y-3">
-                  <input
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-md"
-                  />
+                  <div className="grid grid-cols-1 gap-2">
+                    <input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-md"
+                      placeholder="Event Name"
+                    />
+                    <input
+                      type="date"
+                      value={editDate}
+                      onChange={(e) => setEditDate(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-md text-sm"
+                    />
+                  </div>
                   <textarea
                     value={editDesc}
                     onChange={(e) => setEditDesc(e.target.value)}
                     rows={2}
                     className="w-full px-3 py-2 border rounded-md resize-none"
+                    placeholder="Description"
                   />
 
                   <div className="flex justify-end gap-2">
@@ -244,22 +296,32 @@ const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
                 // VIEW MODE
                 <>
                   <div className="flex justify-between mb-3">
-                    <Calendar className="text-blue-600" size={20} />
+                    <div className="flex gap-2 items-center">
+                      <Calendar className="text-blue-600" size={20} />
+                      <span className="text-md font-semibold text-slate-500">
+                        {event.eventDate ? (
+                          new Date(event.eventDate).toLocaleDateString('en-GB')
+                        ) : (
+                          event.createdAt && new Date(event.createdAt).toLocaleDateString('en-GB')
+                        )}
+                      </span>
+                    </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={(e) => startEditing(e, event)}
-                        className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors hover:cursor-pointer"
                         title="Edit event"
                       >
                         <Pencil size={16} />
                       </button>
                       <button
-                        onClick={(e) => handleDelete(e, event.id)}
-                        className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
+                        onClick={(e) => handleDeleteClick(e, event.id)}
+                        className="p-1.5 text-slate-400 hover:text-red-500 transition-colors hover:cursor-pointer"
                         title="Delete event"
                       >
                         <Trash2 size={16} />
                       </button>
+
                     </div>
                   </div>
 
@@ -268,7 +330,7 @@ const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
                     {event.description || 'No description'}
                   </p>
 
-                  <div 
+                  <div
                     onClick={() => onSelectEvent(event)}
                     className="flex items-center text-sm text-slate-600 font-medium hover:text-blue-600 cursor-pointer transition-colors"
                   >
@@ -280,8 +342,19 @@ const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
           );
         })}
       </div>
+
+      <ConfirmModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={confirmDelete}
+        title="Delete Event"
+        message="Are you sure you want to delete this event? This action will permanently remove all associated documents and data."
+        confirmText="Delete Event"
+        type="danger"
+      />
     </div>
   );
 };
+
 
 export default EventList;

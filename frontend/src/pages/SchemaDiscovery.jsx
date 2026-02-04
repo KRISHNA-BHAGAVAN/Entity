@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabaseClient";
 import { useToast } from "../contexts/ToastContext";
 import {
@@ -33,6 +33,7 @@ import JSZip from "jszip";
 
 const SchemaDiscovery = () => {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const eventId = searchParams.get('eventId');
   const [event, setEvent] = useState(null);
   const { success, error: showError } = useToast();
@@ -79,6 +80,11 @@ const SchemaDiscovery = () => {
 
   const [error, setError] = useState(null);
 
+  useEffect(() => {
+    if (!eventId) {
+      navigate('/');
+    }
+  }, [eventId]);
   const handleTableToggle = (tableIndex) => {
     setTableViewModes((prev) => ({
       ...prev,
@@ -231,11 +237,11 @@ const SchemaDiscovery = () => {
               });
             });
             setReferenceReplacements(initialReplacements);
-            setIsLoadingMarkdown(false);
           } catch (err) {
             console.error("Failed to parse event schema:", err);
           }
         }
+        setIsLoadingMarkdown(false);
         }
       } catch (err) {
         console.error('Error loading event and docs:', err);
@@ -704,7 +710,14 @@ const SchemaDiscovery = () => {
   };
 
   const handleDiscoverSchema = async () => {
-    if (!selectedDocs.size) return;
+    if (!selectedDocs.size) {
+      setError({
+        type: 'no_docs_selected',
+        message: 'Please select at least one document to discover schema.',
+        action: 'select_docs'
+      });
+      return;
+    }
     if (useCustomInstructions) {
       setShowInstructionsModal(true);
     } else {
@@ -750,8 +763,24 @@ const SchemaDiscovery = () => {
         });
       });
       setEditableTables(allTables);
+      
+      // Show warning if using fallback keys
+      if (result?.warning) {
+        showError(result.warning);
+      }
     } catch (err) {
-      setError(`Schema discovery failed: ${err.message}`);
+      console.error('Schema discovery error:', err);
+      
+      // Handle BYOK-specific errors
+      if (err.code === 'BYOK_REQUIRED' || err.code === 'BYOK_SETUP_REQUIRED') {
+        setError({
+          type: 'byok_required',
+          message: err.message,
+          action: err.action
+        });
+      } else {
+        setError(`Schema discovery failed: ${err.message}`);
+      }
     } finally {
       setIsDiscovering(false);
     }
@@ -948,7 +977,7 @@ const SchemaDiscovery = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-slate-100 overflow-hidden border">
+    <div className="h-full flex flex-col bg-slate-100 overflow-hidden">
       {/* HEADER */}
       <div className="px-4 py-2 space-y-2 bg-white border-b">
         <div className="flex justify-between">
@@ -1081,6 +1110,95 @@ const SchemaDiscovery = () => {
           </div>
         </div>
       </div>
+
+      {/* No Documents Selected Error */}
+      {error?.type === 'no_docs_selected' && (
+        <div className="mx-4 mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-start gap-3">
+            <div className="shrink-0">
+              <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-blue-800 mb-1">
+                No Documents Selected
+              </h3>
+              <p className="text-sm text-blue-700 mb-3">
+                {error.message}
+              </p>
+              <button
+                onClick={() => setError(null)}
+                className="px-3 py-1.5 bg-white text-blue-700 text-sm font-medium rounded-md border border-blue-300 hover:bg-blue-50 transition-colors"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BYOK Error Message */}
+      {error?.type === 'byok_required' && (
+        <div className="mx-4 mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="flex items-start gap-3">
+            <div className="shrink-0">
+              <svg className="w-5 h-5 text-amber-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-amber-800 mb-1">
+                API Key Required
+              </h3>
+              <p className="text-sm text-amber-700 mb-3">
+                {error.message}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => navigate('/settings/byok')}
+                  className="px-3 py-1.5 bg-amber-600 text-white text-sm font-medium rounded-md hover:bg-amber-700 transition-colors"
+                >
+                  Add API Key
+                </button>
+                <button
+                  onClick={() => setError(null)}
+                  className="px-3 py-1.5 bg-white text-amber-700 text-sm font-medium rounded-md border border-amber-300 hover:bg-amber-50 transition-colors"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* General Error Message */}
+      {error && typeof error === 'string' && (
+        <div className="mx-4 mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-start gap-3">
+            <div className="shrink-0">
+              <svg className="w-5 h-5 text-red-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-red-800 mb-1">
+                Error
+              </h3>
+              <p className="text-sm text-red-700 mb-3">
+                {error}
+              </p>
+              <button
+                onClick={() => setError(null)}
+                className="px-3 py-1.5 bg-white text-red-700 text-sm font-medium rounded-md border border-red-300 hover:bg-red-50 transition-colors"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MOBILE TOP NAV */}
       <div className="flex lg:hidden bg-white border-b sticky top-0 ">
@@ -1267,25 +1385,41 @@ const SchemaDiscovery = () => {
           {/* Content */}
           <div className="flex-1 overflow-y-hidden p-4 md:p-6 space-y-6">
             {activeTab === "fields" && (
-              schemaData ? (
-                <FieldsTab {...fieldProps} />
-              ) : (
+              isLoadingMarkdown ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="text-center">
                     <Loader2 className="animate-spin text-indigo-600 mx-auto mb-2" size={24} />
                     <p className="text-sm text-slate-500">Loading fields...</p>
                   </div>
                 </div>
+              ) : schemaData ? (
+                <FieldsTab {...fieldProps} />
+              ) : (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center">
+                    <Wand2 className="text-slate-300 mx-auto mb-2" size={32} />
+                    <p className="text-sm text-slate-500">No schema discovered yet</p>
+                    <p className="text-xs text-slate-400 mt-1">Select documents and click "Discover Schema" to get started</p>
+                  </div>
+                </div>
               )
             )}
             {activeTab === "tables" && (
-              editableTables.length > 0 ? (
-                <TablesTab {...tableProps} />
-              ) : (
+              isLoadingMarkdown ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="text-center">
                     <Loader2 className="animate-spin text-indigo-600 mx-auto mb-2" size={24} />
                     <p className="text-sm text-slate-500">Loading tables...</p>
+                  </div>
+                </div>
+              ) : editableTables.length > 0 ? (
+                <TablesTab {...tableProps} />
+              ) : (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center">
+                    <Table className="text-slate-300 mx-auto mb-2" size={32} />
+                    <p className="text-sm text-slate-500">No tables found</p>
+                    <p className="text-xs text-slate-400 mt-1">Tables will appear here after schema discovery</p>
                   </div>
                 </div>
               )
@@ -1298,12 +1432,6 @@ const SchemaDiscovery = () => {
 
         </section>
       </div>
-
-      {error && (
-        <div className="m-4 bg-red-50 border border-red-200 p-3 rounded-lg text-sm text-red-700">
-          {error}
-        </div>
-      )}
 
       {/* Instructions Modal */}
       {showInstructionsModal && (

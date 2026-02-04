@@ -43,7 +43,8 @@ def get_events(jwt_token: Optional[str] = None) -> List[Dict[str, Any]]:
         'id': e['id'],
         'name': e['name'],
         'description': e['description'],
-        'createdAt': e['created_at']
+        'createdAt': e['created_at'],
+        'eventDate': e.get('event_date')
     } for e in result.data]
 
 def save_event(event: Dict[str, Any], jwt_token: Optional[str] = None) -> None:
@@ -57,13 +58,14 @@ def save_event(event: Dict[str, Any], jwt_token: Optional[str] = None) -> None:
         'id': event['id'],
         'name': event['name'],
         'description': event['description'],
-        'created_at': event['createdAt']
+        'created_at': event['createdAt'],
+        'event_date': event.get('eventDate')
     }
     
     if user_id:
         event_data['user_id'] = user_id
     
-    supabase.table('events').insert(event_data).execute()
+    supabase.table('events').upsert(event_data).execute()
 
 def delete_event(event_id: str, jwt_token: Optional[str] = None) -> None:
     """Delete event and associated docs for the authenticated user"""
