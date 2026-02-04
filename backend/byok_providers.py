@@ -11,8 +11,8 @@ from langchain_groq import ChatGroq
 
 class LLMProviderAdapter(ABC):
     @abstractmethod
-    def validate_key(self, api_key: str) -> bool:
-        """Validate API key with minimal token usage"""
+    def validate_key(self, api_key: str, model: Optional[str] = None) -> bool:
+        """Validate API key and optional model access"""
         pass
     
     @abstractmethod
@@ -21,22 +21,41 @@ class LLMProviderAdapter(ABC):
         pass
 
 class OpenAIAdapter(LLMProviderAdapter):
-    def validate_key(self, api_key: str) -> bool:
-        """Validate OpenAI API key"""
+    def validate_key(self, api_key: str, model: Optional[str] = None) -> bool:
+        """Validate OpenAI API key and optional model"""
         try:
+            # 1. Basic Key Validation (Fast)
             headers = {
                 'Authorization': f'Bearer {api_key}',
                 'Content-Type': 'application/json'
             }
-            # Use minimal request to validate key
             response = requests.get(
                 'https://api.openai.com/v1/models',
                 headers=headers,
                 timeout=10
             )
-            return response.status_code == 200
-        except Exception:
-            return False
+            if response.status_code != 200:
+                raise ValueError("Invalid API Key")
+            
+            # 2. Model Access Validation (If model specified)
+            if model:
+                llm = self.create_llm(api_key, model, max_tokens=5)
+                llm.invoke("Hi")
+            
+            return True
+        except Exception as e:
+            # Propagate specific error messages if possible, or handle in endpoint
+            # For now, we return specific error string if possible, but the signature says bool
+            # The user wants specific error messages.
+            # I should probably change the signature to return (bool, str) or raise exceptions.
+            # But adhering to the interface... The endpoint catches exceptions?
+            # The current interface is bool. I'll stick to bool for now and raise Exception if I can, 
+            # but the abstract method returns bool. 
+            # Let's check the abstract method again. It returns bool.
+            # However, the user wants "appropriate error message to the user like Invalid api key or invalid model".
+            # Raising exception is better.
+            raise e 
+
     
     def create_llm(self, api_key: str, model: str = "gpt-4o-mini", **options) -> ChatOpenAI:
         """Create ChatOpenAI instance"""
@@ -47,17 +66,26 @@ class OpenAIAdapter(LLMProviderAdapter):
         )
 
 class GeminiAdapter(LLMProviderAdapter):
-    def validate_key(self, api_key: str) -> bool:
-        """Validate Gemini API key"""
+    def validate_key(self, api_key: str, model: Optional[str] = None) -> bool:
+        """Validate Gemini API key and optional model"""
         try:
-            # Use Google AI Studio API for validation
+            # 1. Basic Key Validation
             response = requests.get(
                 f'https://generativelanguage.googleapis.com/v1beta/models?key={api_key}',
                 timeout=10
             )
-            return response.status_code == 200
-        except Exception:
-            return False
+            if response.status_code != 200:
+                raise ValueError("Invalid API Key")
+
+            # 2. Model Validation
+            if model:
+                llm = self.create_llm(api_key, model, max_output_tokens=5)
+                llm.invoke("Hi")
+                
+            return True
+        except Exception as e:
+            raise e
+
     
     def create_llm(self, api_key: str, model: str = "gemini-1.5-flash", **options) -> ChatGoogleGenerativeAI:
         """Create ChatGoogleGenerativeAI instance"""
@@ -68,22 +96,31 @@ class GeminiAdapter(LLMProviderAdapter):
         )
 
 class GroqAdapter(LLMProviderAdapter):
-    def validate_key(self, api_key: str) -> bool:
-        """Validate Groq API key"""
+    def validate_key(self, api_key: str, model: Optional[str] = None) -> bool:
+        """Validate Groq API key and optional model"""
         try:
+            # 1. Basic Key Validation
             headers = {
                 'Authorization': f'Bearer {api_key}',
                 'Content-Type': 'application/json'
             }
-            # Use models endpoint for validation
             response = requests.get(
                 'https://api.groq.com/openai/v1/models',
                 headers=headers,
                 timeout=10
             )
-            return response.status_code == 200
-        except Exception:
-            return False
+            if response.status_code != 200:
+                raise ValueError("Invalid API Key")
+
+            # 2. Model Validation
+            if model:
+                llm = self.create_llm(api_key, model, max_tokens=5)
+                llm.invoke("Hi")
+
+            return True
+        except Exception as e:
+            raise e
+
     
     def create_llm(self, api_key: str, model: str = "llama-3.3-70b-versatile", **options) -> ChatGroq:
         """Create ChatGroq instance"""
