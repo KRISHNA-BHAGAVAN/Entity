@@ -7,12 +7,10 @@ uvicorn
 langchain-openai
 langchain-google-genai
 langchain-groq
-sse_starlette
-markitdown[all]
+markitdown
 python-multipart
 python-docx
 supabase
-PyJWT
 redis
 rapidfuzz
 tiktoken

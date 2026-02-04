@@ -18,7 +18,7 @@ export default defineConfig({
             if (id.includes('react-markdown') || id.includes('remark-gfm') || id.includes('rehype-raw')) {
               return 'markdown';
             }
-            if (id.includes('jszip') || id.includes('mammoth') || id.includes('turndown')) {
+            if (id.includes('jszip')) {
               return 'docProcessing';
             }
           }
@@ -28,7 +28,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000
   },
   optimizeDeps: {
-    include: ['jszip', 'mammoth', 'turndown', 'turndown-plugin-gfm']
+    include: ['jszip']
   },
   server: {
     fs: {

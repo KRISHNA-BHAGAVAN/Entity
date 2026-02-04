@@ -106,7 +106,27 @@ Upload any `.docx` file and let the AI scan it to identify:
 
 ## ⚡ Quick Start
 
+### 🐳 Docker Quick Start (Recommended)
+
+If you have Docker installed, you can run the entire system with one command:
+
+1. Copy env file and fill details:
+   ```bash
+   cp .env.example .env
+   ```
+2. Start services:
+   ```bash
+   docker-compose up --build
+   ```
+   
+App: `http://localhost:5173` | API: `http://localhost:8000/swagger`
+
+See [DOCKER.md](./DOCKER.md) for detailed configuration.
+
+---
+
 ### 1️⃣ Clone the Repository
+
 
 ```bash
 git clone <repository-url>
