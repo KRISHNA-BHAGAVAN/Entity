@@ -242,7 +242,6 @@ const ColumnConfig = () => {
         }
     };
 
-    if (loading) return <div className="text-slate-400 p-4 text-center">Loading columns...</div>;
 
     return (
         <div className="bg-white p-6 rounded-xl border border-slate-900 shadow-sm h-full flex flex-col min-w-full">
@@ -329,87 +328,97 @@ const ColumnConfig = () => {
 
             <div className="flex overflow-y-hidden">
 
+
                 <div className="min-w-[600px] shrink-0 overflow-y-auto pr-1 space-y-3 mb-4 max-h-[480px] custom-scrollbar">
 
-                    {columns.map((col, index) => (
-                        <div
-                            key={index}
-                            draggable={editingIndex === null} // Disable drag when editing
-                            onDragStart={(e) => handleDragStart(e, index)}
-                            onDragEnter={(e) => handleDragEnter(e, index)}
-                            onDragEnd={handleDragEnd}
-                            onDragOver={(e) => e.preventDefault()}
-                            className={`flex flex-col gap-2 w-full bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:border-slate-300 hover:shadow-md transition-all group ${draggedItemIndex === index ? 'opacity-50 border-dashed border-indigo-300' : ''}`}
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className={`cursor-move text-slate-400 hover:text-slate-600 p-1 ${editingIndex !== null ? 'cursor-not-allowed opacity-50' : ''}`}>
-                                    <GripVertical size={16} />
-                                </div>
+                    {loading ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                            <Loader2 className="animate-spin mb-2 text-indigo-600" size={32} />
+                            <p className="text-sm font-medium">Loading columns...</p>
+                        </div>
+                    ) : (
+                        <>
+                            {columns.map((col, index) => (
+                                <div
+                                    key={index}
+                                    draggable={editingIndex === null} // Disable drag when editing
+                                    onDragStart={(e) => handleDragStart(e, index)}
+                                    onDragEnter={(e) => handleDragEnter(e, index)}
+                                    onDragEnd={handleDragEnd}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    className={`flex flex-col gap-2 w-full bg-white p-3 rounded-lg border border-slate-200 shadow-sm hover:border-slate-300 hover:shadow-md transition-all group ${draggedItemIndex === index ? 'opacity-50 border-dashed border-indigo-300' : ''}`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className={`cursor-move text-slate-400 hover:text-slate-600 p-1 ${editingIndex !== null ? 'cursor-not-allowed opacity-50' : ''}`}>
+                                            <GripVertical size={16} />
+                                        </div>
 
-                                <div className="flex-1 min-w-0">
-                                    {editingIndex === index && !col.isSystem && !SYSTEM_COLUMNS.includes(col.name) ? (
+                                        <div className="flex-1 min-w-0">
+                                            {editingIndex === index && !col.isSystem && !SYSTEM_COLUMNS.includes(col.name) ? (
+                                                <input
+                                                    id={`col-name-edit-${index}`}
+                                                    name={`column_name_${index}`}
+                                                    type="text"
+                                                    value={col.name}
+                                                    onChange={(e) => updateColumnName(index, e.target.value)}
+                                                    onBlur={() => setEditingIndex(null)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') setEditingIndex(null);
+                                                        if (e.key === 'Escape') setEditingIndex(null);
+                                                    }}
+                                                    autoFocus
+                                                    className="w-full px-2 py-1 text-sm font-semibold text-slate-800 border border-indigo-300 rounded focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none"
+                                                />
+                                            ) : (
+                                                <h4 className="text-sm font-semibold text-slate-700 truncate" title={col.name}>
+                                                    {col.name}
+                                                </h4>
+                                            )}
+                                        </div>
+
+                                        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                            <button
+                                                onClick={() => setEditingIndex(index)}
+                                                disabled={SYSTEM_COLUMNS.includes(col.name)}
+                                                className={`p-1.5 rounded-md transition-colors ${SYSTEM_COLUMNS.includes(col.name) ? 'opacity-30 cursor-not-allowed' : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'}`}
+                                                title="Edit name"
+                                            >
+                                                <Edit2 size={14} />
+                                            </button>
+                                            <button
+                                                onClick={() => handleRemoveColumn(index)}
+                                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
+                                                title="Delete column"
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="pl-8 relative">
+                                        <Info size={12} className="absolute left-3 top-2.5 text-slate-300" />
                                         <input
-                                            id={`col-name-edit-${index}`}
-                                            name={`column_name_${index}`}
+                                            id={`col-desc-edit-${index}`}
+                                            name={`column_desc_${index}`}
                                             type="text"
-                                            value={col.name}
-                                            onChange={(e) => updateColumnName(index, e.target.value)}
-                                            onBlur={() => setEditingIndex(null)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') setEditingIndex(null);
-                                                if (e.key === 'Escape') setEditingIndex(null);
-                                            }}
-                                            autoFocus
-                                            className="w-full px-2 py-1 text-sm font-semibold text-slate-800 border border-indigo-300 rounded focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none"
+                                            value={col.description || ''}
+                                            onChange={(e) => updateColumnDescription(index, e.target.value)}
+                                            placeholder="Description / hint for AI..."
+                                            disabled={SYSTEM_COLUMNS.includes(col.name)}
+                                            className={`w-full pl-6 pr-3 py-1.5 border border-slate-100 rounded text-xs text-slate-600 placeholder:text-slate-400 focus:bg-white focus:border-indigo-200 focus:ring-1 focus:ring-indigo-100 outline-none transition-all ${SYSTEM_COLUMNS.includes(col.name) ? 'bg-slate-100 cursor-not-allowed' : 'bg-slate-50'}`}
                                         />
-                                    ) : (
-                                        <h4 className="text-sm font-semibold text-slate-700 truncate" title={col.name}>
-                                            {col.name}
-                                        </h4>
-                                    )}
+                                    </div>
                                 </div>
+                            ))}
 
-                                <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                    <button
-                                        onClick={() => setEditingIndex(index)}
-                                        disabled={SYSTEM_COLUMNS.includes(col.name)}
-                                        className={`p-1.5 rounded-md transition-colors ${SYSTEM_COLUMNS.includes(col.name) ? 'opacity-30 cursor-not-allowed' : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'}`}
-                                        title="Edit name"
-                                    >
-                                        <Edit2 size={14} />
-                                    </button>
-                                    <button
-                                        onClick={() => handleRemoveColumn(index)}
-                                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
-                                        title="Delete column"
-                                    >
-                                        <X size={16} />
-                                    </button>
+                            {columns.length === 0 && !loading && (
+                                <div className="flex flex-col items-center justify-center py-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                                    <Columns size={32} className="mb-2 opacity-20" />
+                                    <p className="text-sm font-medium">No columns defined</p>
+                                    <p className="text-xs mt-1">Add a column below to get started</p>
                                 </div>
-                            </div>
-
-                            <div className="pl-8 relative">
-                                <Info size={12} className="absolute left-3 top-2.5 text-slate-300" />
-                                <input
-                                    id={`col-desc-edit-${index}`}
-                                    name={`column_desc_${index}`}
-                                    type="text"
-                                    value={col.description || ''}
-                                    onChange={(e) => updateColumnDescription(index, e.target.value)}
-                                    placeholder="Description / hint for AI..."
-                                    disabled={SYSTEM_COLUMNS.includes(col.name)}
-                                    className={`w-full pl-6 pr-3 py-1.5 border border-slate-100 rounded text-xs text-slate-600 placeholder:text-slate-400 focus:bg-white focus:border-indigo-200 focus:ring-1 focus:ring-indigo-100 outline-none transition-all ${SYSTEM_COLUMNS.includes(col.name) ? 'bg-slate-100 cursor-not-allowed' : 'bg-slate-50'}`}
-                                />
-                            </div>
-                        </div>
-                    ))}
-
-                    {columns.length === 0 && (
-                        <div className="flex flex-col items-center justify-center py-12 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
-                            <Columns size={32} className="mb-2 opacity-20" />
-                            <p className="text-sm font-medium">No columns defined</p>
-                            <p className="text-xs mt-1">Add a column below to get started</p>
-                        </div>
+                            )}
+                        </>
                     )}
                 </div>
 

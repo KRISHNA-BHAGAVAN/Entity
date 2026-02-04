@@ -20,16 +20,20 @@ def get_jwt_token(authorization: Optional[str] = Header(None)):
 class BYOKAddRequest(BaseModel):
     provider: str
     api_key: str
+    model: Optional[str] = None
 
 class BYOKValidateRequest(BaseModel):
     provider: str
+    model: Optional[str] = None
 
 class BYOKKeyInfo(BaseModel):
     provider: str
+    model: Optional[str]
     status: str
     last_used_at: Optional[str]
     last_validated_at: Optional[str]
     created_at: str
+
 
 # Router
 byok_router = APIRouter(prefix="/api/byok", tags=["BYOK"])
@@ -52,10 +56,23 @@ async def add_or_update_key(
         if request.provider not in ['openai', 'gemini', 'groq']:
             raise HTTPException(status_code=400, detail="Invalid provider")
         
-        # Validate API key with provider
+        # Validate API key with provider (and model if provided)
         adapter = get_provider_adapter(request.provider)
-        if not adapter.validate_key(request.api_key):
-            raise HTTPException(status_code=400, detail="Invalid API key")
+        try:
+             # This will raise exception if invalid
+            adapter.validate_key(request.api_key, request.model)
+        except ValueError as ve:
+             raise HTTPException(status_code=400, detail=str(ve))
+        except Exception as e:
+             # Capture specific errors like "model not found" or "invalid api key"
+             error_msg = str(e)
+             if "401" in error_msg:
+                 detail = "Invalid API Key"
+             elif "404" in error_msg and request.model:
+                 detail = f"Model '{request.model}' not found or not supported"
+             else:
+                 detail = f"Validation failed: {error_msg}"
+             raise HTTPException(status_code=400, detail=detail)
         
         # Encrypt the key
         encrypted_key = byok_crypto.encrypt_api_key(request.api_key)
@@ -68,27 +85,25 @@ async def add_or_update_key(
         
         now = datetime.utcnow().isoformat()
         
+        key_data = {
+            'encrypted_key': encrypted_key,
+            'key_fingerprint': fingerprint,
+            'model': request.model,
+            'status': 'active',
+            'last_validated_at': now
+        }
+        
         if existing.data:
             # Update existing key
-            supabase.table('llm_api_keys').update({
-                'encrypted_key': encrypted_key,
-                'key_fingerprint': fingerprint,
-                'status': 'active',
-                'last_validated_at': now,
-                'updated_at': now
-            }).eq('user_id', user_id).eq('provider', request.provider).execute()
+            key_data['updated_at'] = now
+            supabase.table('llm_api_keys').update(key_data).eq('user_id', user_id).eq('provider', request.provider).execute()
             
             action = 'rotated'
         else:
             # Insert new key
-            supabase.table('llm_api_keys').insert({
-                'user_id': user_id,
-                'provider': request.provider,
-                'encrypted_key': encrypted_key,
-                'key_fingerprint': fingerprint,
-                'status': 'active',
-                'last_validated_at': now
-            }).execute()
+            key_data['user_id'] = user_id
+            key_data['provider'] = request.provider
+            supabase.table('llm_api_keys').insert(key_data).execute()
             
             action = 'created'
         
@@ -96,10 +111,12 @@ async def add_or_update_key(
         supabase.table('llm_key_audit_logs').insert({
             'user_id': user_id,
             'provider': request.provider,
+            'model': request.model,
             'action': action
         }).execute()
         
         return {"success": True, "action": action}
+
         
     except HTTPException:
         raise
@@ -120,20 +137,28 @@ async def validate_key(
         user = supabase.auth.get_user()
         user_id = user.user.id
         
-        # Get encrypted key
-        result = supabase.table('llm_api_keys').select('encrypted_key').eq(
+        # Get encrypted key and stored model
+        result = supabase.table('llm_api_keys').select('encrypted_key, model').eq(
             'user_id', user_id
         ).eq('provider', request.provider).eq('status', 'active').single().execute()
+
         
         if not result.data:
             raise HTTPException(status_code=404, detail="API key not found")
         
         # Decrypt and validate
         encrypted_key = result.data['encrypted_key']
+        # If request doesn't specify model, try to use stored model
+        model_to_test = request.model if request.model else result.data.get('model')
+        
         decrypted_key = byok_crypto.decrypt_api_key(encrypted_key)
         
         adapter = get_provider_adapter(request.provider)
-        is_valid = adapter.validate_key(decrypted_key)
+        try:
+             adapter.validate_key(decrypted_key, model_to_test)
+             is_valid = True
+        except Exception:
+             is_valid = False
         
         # Clear from memory
         decrypted_key = None
@@ -148,10 +173,12 @@ async def validate_key(
             supabase.table('llm_key_audit_logs').insert({
                 'user_id': user_id,
                 'provider': request.provider,
+                'model': model_to_test,
                 'action': 'validated'
             }).execute()
         
         return {"valid": is_valid}
+
         
     except HTTPException:
         raise
@@ -209,17 +236,20 @@ async def list_providers(
         user_id = user.user.id
         
         result = supabase.table('llm_api_keys').select(
-            'provider, status, last_used_at, last_validated_at, created_at'
+            'provider, model, status, last_used_at, last_validated_at, created_at'
         ).eq('user_id', user_id).execute()
+
         
         return [
             BYOKKeyInfo(
                 provider=row['provider'],
+                model=row.get('model'),
                 status=row['status'],
                 last_used_at=row.get('last_used_at'),
                 last_validated_at=row.get('last_validated_at'),
                 created_at=row['created_at']
             )
+
             for row in result.data
         ]
         
