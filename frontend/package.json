@@ -15,6 +15,8 @@
     "@react-pdf-viewer/highlight": "^3.12.0",
     "@react-pdf-viewer/search": "^3.12.0",
     "@supabase/supabase-js": "^2.87.1",
+    "@syncfusion/ej2-react-buttons": "^32.2.7",
+    "@syncfusion/ej2-react-documenteditor": "^32.2.7",
     "@tailwindcss/vite": "^4.1.17",
     "dexie": "^4.2.1",
     "dexie-react-hooks": "^4.2.0",

@@ -1,26 +1,32 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta 
-      http-equiv="Content-Security-Policy"
-      content="
+
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
+        font-src 'self' https://cdn.syncfusion.com https://fonts.gstatic.com https://maxcdn.bootstrapcdn.com data:;
         script-src 'self' 'unsafe-eval' https://unpkg.com;
         worker-src 'self' blob:;
-        connect-src 'self' https://wsadegzzmafyxwkjwexk.supabase.co http://localhost:8000;
-        style-src 'self' 'unsafe-inline';
-        img-src 'self' data:;
-        media-src 'self' data:;
+        connect-src 'self' https://wsadegzzmafyxwkjwexk.supabase.co http://localhost:8000 https://maxcdn.bootstrapcdn.com;
+        style-src 'self' 'unsafe-inline' https://cdn.syncfusion.com https://maxcdn.bootstrapcdn.com https://fonts.googleapis.com;
+        img-src 'self' data: https://fonts.googleapis.com;
+        media-src 'self' data:; 
         object-src 'none';
-      " 
-    />
-    <link rel="icon" type="image/svg+xml" href="/entity-white.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Entity</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+      " />
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  <meta name="description" content="Syncfusion React UI Components" />
+  <meta name="author" content="Syncfusion" />
+  <link href="https://cdn.syncfusion.com/ej2/32.1.19/tailwind3.css" rel="stylesheet">
+  <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="icon" type="image/svg+xml" href="/entity-white.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Entity</title>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
 </html>

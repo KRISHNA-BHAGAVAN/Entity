@@ -21,6 +21,7 @@ import {
   ChevronDown,
   Key,
 } from "lucide-react";
+import DocxPreview from "./components/DocxPreview";
 
 const App = () => {
   const navigate = useNavigate();
@@ -249,6 +250,11 @@ const App = () => {
               <Route
                 path="/preview"
                 element={<PreviewPage />}
+              />
+
+              <Route
+                path="/docx-preview"
+                element={<DocxPreview />}
               />
 
             </Routes>
