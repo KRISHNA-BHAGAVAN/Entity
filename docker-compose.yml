@@ -1,5 +1,7 @@
+name: SDS
 services:
   backend:
+    container_name: SDS-backend
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -9,15 +11,16 @@ services:
       - ./backend/.env
     volumes:
       - ./backend:/app
-      - /app/venv # Prevent overwriting container venv with local one
+      - /app/venv
     restart: always
 
   frontend:
+    container_name: SDS-frontend
     build:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "5173:80" # Mapping to 5173 for local familiarity
+      - "80:80"
     env_file:
       - ./frontend/.env
     depends_on:
