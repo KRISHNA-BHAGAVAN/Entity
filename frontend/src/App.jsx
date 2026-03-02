@@ -10,7 +10,6 @@ import SchemaDiscovery from "./pages/SchemaDiscovery";
 import BYOKSettings from "./pages/BYOKSettings";
 // import EventDetail from "./pages/EventDetail";
 import EntityLogo from "./components/logo";
-import PreviewPage from "./pages/PreviewPage";
 import Reports from "./pages/Reports";
 import SideMenu from "./components/SideMenu";
 
@@ -242,15 +241,6 @@ const App = () => {
                 path="/settings/byok"
                 element={<BYOKSettings />}
               />
-              {/* <Route 
-                path="/event/:eventId" 
-                element={<EventDetail events={events} />} 
-              /> */}
-              <Route
-                path="/preview"
-                element={<PreviewPage />}
-              />
-
             </Routes>
           </main>
         </div>
