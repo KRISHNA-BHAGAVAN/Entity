@@ -119,8 +119,12 @@ export const deleteDoc = async (id) => {
   await apiCall(`/docs/${id}`, { method: 'DELETE' });
 };
 
+export const getDocBlob = async (docId) => {
+  return await apiCall(`/docs/${docId}`, { isBlob: true });
+};
+
 export const downloadDoc = async (docId, filename = 'document.docx') => {
-  const blob = await apiCall(`/docs/${docId}`, { isBlob: true });
+  const blob = await getDocBlob(docId);
   downloadFile(blob, filename);
   return blob;
 };
