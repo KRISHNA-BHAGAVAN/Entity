@@ -28,12 +28,14 @@ Upload any `.docx` file and let the AI scan it to identify:
 - Names, dates, and entities
 - Table data and structured information  
 - Repeating patterns across multiple documents
-- Custom fields you specify via natural language instructions
+- **Custom Discovery Instructions**: Provide natural language context (e.g., "Look specifically for speaker names in the third paragraph") to guide the AI extraction.
 
-### 2. **Event-Based Organization**
-- Group templates by events (conferences, workshops, projects)
-- Manage multiple document versions per event
-- Track event metadata (dates, descriptions)
+### 2. **Professional Document Preview**
+Experience your documents exactly as they appear in Microsoft Word:
+- **Office Preview Mode**: Native-quality rendering of `.docx` files directly in the browser.
+- **Markdown Mode**: Fast, lightweight preview for quick content reviews.
+- **Before/After Toggle**: Instantly switch between the original document and the preview with your changes applied.
+- **Interactive Highlighting**: View exactly where discovered fields are located in the document.
 
 ### 3. **Smart Document Replacement**
 - Replace identified variables across documents while preserving:
@@ -46,14 +48,19 @@ Upload any `.docx` file and let the AI scan it to identify:
   - Multi-line replacements
   - Table cell content
 
-### 4. **Automated Report Generation**
+### 4. **Event-Based Organization**
+- Group templates by events (conferences, workshops, projects)
+- Manage multiple document versions per event
+- Track event metadata (dates, descriptions)
+
+### 5. **Automated Report Generation**
 - Define custom report columns via drag-and-drop interface
 - Generate Excel reports across date ranges
 - AI-powered data extraction from documents
 - Handle missing data with fallback mechanisms
 - Skip empty events automatically
 
-### 5. **Bring Your Own Key (BYOK)**
+### 6. **Bring Your Own Key (BYOK)**
 - Securely store your own API keys for:
   - OpenAI (GPT-4o, GPT-4o-mini, o3-mini)
   - Google Gemini (Gemini 1.5 Pro/Flash, Gemini 2.0 Flash)
@@ -74,6 +81,7 @@ Upload any `.docx` file and let the AI scan it to identify:
 | React Router 7 | Navigation |
 | Lucide React | Icon system |
 | React Markdown | Document preview |
+| Docx Preview | Office document rendering |
 | Vite (Rolldown) | Ultra-fast build tool |
 
 ### **Backend**
@@ -231,11 +239,12 @@ App will open at: `http://localhost:5173`
 3. Verify extracted values
 4. Edit table data if needed
 
-### Step 5: Generate Documents
-1. Modify field values as needed
-2. Click **Generate Documents**  
-3. System creates updated `.docx` files with your changes
-4. Download processed documents
+### Step 5: Preview & Generate Documents
+1. Modify field values or table data as needed.
+2. **Toggle "Show Preview Changes"** (Eye icon) to see a live delta of your edits.
+3. Switch between **Markdown** and **Office** preview modes for professional verification.
+4. Click **Generate Documents** to create updated `.docx` files with your changes.
+5. Download processed documents individually or as a ZIP archive.
 
 ### Step 6: Generate Reports (Optional)
 1. Go to **Reports** page
