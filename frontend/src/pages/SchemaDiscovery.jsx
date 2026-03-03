@@ -9,6 +9,7 @@ import {
   Download,
   Wand2,
   Eye,
+  EyeOff,
   Table,
   BarChart3,
   Save,
@@ -25,6 +26,7 @@ import { apiCall } from "../config/api";
 // import { getMarkdownFromCache } from "../services/markdownCache"; // not used
 
 import MarkdownPreview from "../components/MarkdownPreview";
+import OfficePreview from "../components/OfficePreview";
 import FieldsTab from "../components/FieldsTab";
 import TablesTab from "../components/TablesTab";
 import StatsTab from "../components/StatsTab";
@@ -56,6 +58,7 @@ const SchemaDiscovery = () => {
   const [selectedFieldKeys, setSelectedFieldKeys] = useState(new Set());
   const [selectedReferences, setSelectedReferences] = useState(new Set());
   const [highlightAll, setHighlightAll] = useState(false);
+  const [previewMode, setPreviewMode] = useState("markdown");
 
   const [currentFieldIndex, setCurrentFieldIndex] = useState(0);
   const [activeTab, setActiveTab] = useState("fields");
@@ -77,6 +80,11 @@ const SchemaDiscovery = () => {
     new Set()
   );
   const [showActionsDropdown, setShowActionsDropdown] = useState(false);
+
+  const [showChanges, setShowChanges] = useState(false);
+  const [previewChangedBlob, setPreviewChangedBlob] = useState(null);
+  const [isPreviewGenerating, setIsPreviewGenerating] = useState(false);
+  const [modifiedMarkdown, setModifiedMarkdown] = useState("");
 
   const [error, setError] = useState(null);
 
@@ -102,10 +110,10 @@ const SchemaDiscovery = () => {
 
   const undoTable = () => {
     if (!tableHistory.past.length) return;
-    
+
     const previousState = tableHistory.past[tableHistory.past.length - 1];
     const currentState = [...tableEdits];
-    
+
     setTableEdits(previousState);
     setTableHistory(prev => ({
       past: prev.past.slice(0, -1),
@@ -115,10 +123,10 @@ const SchemaDiscovery = () => {
 
   const redoTable = () => {
     if (!tableHistory.future.length) return;
-    
+
     const nextState = tableHistory.future[0];
     const currentState = [...tableEdits];
-    
+
     setTableEdits(nextState);
     setTableHistory(prev => ({
       past: [...prev.past, currentState],
@@ -128,7 +136,7 @@ const SchemaDiscovery = () => {
 
   const handleTableUpdate = (tableIndex, edits) => {
     saveTableState();
-    
+
     console.log("🔍 TABLE UPDATE DEBUG:", {
       tableIndex,
       edits,
@@ -180,68 +188,68 @@ const SchemaDiscovery = () => {
           .select('*, event_schema')
           .eq('id', eventId)
           .single();
-        
+
         if (eventData) {
           setEvent(eventData);
           const loaded = await getDocs(eventId);
-        setDocs(loaded);
-        setSelectedDocs(new Set());
+          setDocs(loaded);
+          setSelectedDocs(new Set());
 
-        const allTables = [];
-        loaded.forEach((doc) => {
-          if (doc.tableData && doc.tableData.length > 0) {
-            doc.tableData.forEach((table) => {
-              allTables.push({
-                ...table,
-                filename: doc.name,
+          const allTables = [];
+          loaded.forEach((doc) => {
+            if (doc.tableData && doc.tableData.length > 0) {
+              doc.tableData.forEach((table) => {
+                allTables.push({
+                  ...table,
+                  filename: doc.name,
+                });
               });
-            });
+            }
+          });
+          setEditableTables(allTables);
+
+          if (loaded.length > 0) {
+            setSelectedDocId(loaded[0].id);
+            setIsLoadingMarkdown(true);
           }
-        });
-        setEditableTables(allTables);
 
-        if (loaded.length > 0) {
-          setSelectedDocId(loaded[0].id);
-          setIsLoadingMarkdown(true);
-        }
+          if (eventData.event_schema) {
+            try {
+              const existingSchema =
+                typeof eventData.event_schema === "string"
+                  ? JSON.parse(eventData.event_schema)
+                  : eventData.event_schema;
 
-        if (eventData.event_schema) {
-          try {
-            const existingSchema =
-              typeof eventData.event_schema === "string"
-                ? JSON.parse(eventData.event_schema)
-                : eventData.event_schema;
+              setSchemaData(existingSchema);
 
-            setSchemaData(existingSchema);
-
-            const fieldsFromSchema =
-              existingSchema.schema?.document_fields?.fields || {};
-            const refsFromSchema = {};
-            Object.entries(fieldsFromSchema).forEach(([key, field]) => {
-              if (Array.isArray(field.references)) {
-                refsFromSchema[key] = field.references;
-              }
-            });
-
-            const mergedFieldRefs = {
-              ...refsFromSchema,
-              ...(existingSchema.fieldReferences || {}),
-            };
-
-            setFieldReferences(mergedFieldRefs);
-
-            const initialReplacements = {};
-            Object.entries(mergedFieldRefs).forEach(([fieldKey, refs]) => {
-              refs.forEach((ref) => {
-                initialReplacements[`${fieldKey}:${ref}`] = ref;
+              const fieldsFromSchema =
+                existingSchema.schema?.document_fields?.fields || {};
+              const refsFromSchema = {};
+              Object.entries(fieldsFromSchema).forEach(([key, field]) => {
+                if (Array.isArray(field.references)) {
+                  refsFromSchema[key] = field.references;
+                }
               });
-            });
-            setReferenceReplacements(initialReplacements);
-          } catch (err) {
-            console.error("Failed to parse event schema:", err);
+
+              const mergedFieldRefs = {
+                ...refsFromSchema,
+                ...(existingSchema.fieldReferences || {}),
+              };
+
+              setFieldReferences(mergedFieldRefs);
+
+              const initialReplacements = {};
+              Object.entries(mergedFieldRefs).forEach(([fieldKey, refs]) => {
+                refs.forEach((ref) => {
+                  initialReplacements[`${fieldKey}:${ref}`] = ref;
+                });
+              });
+              setReferenceReplacements(initialReplacements);
+            } catch (err) {
+              console.error("Failed to parse event schema:", err);
+            }
           }
-        }
-        setIsLoadingMarkdown(false);
+          setIsLoadingMarkdown(false);
         }
       } catch (err) {
         console.error('Error loading event and docs:', err);
@@ -402,7 +410,7 @@ const SchemaDiscovery = () => {
   const removeReference = (fieldKey, refIndex) => {
     saveFieldState(fieldKey);
     const refToRemove = fieldReferences[fieldKey][refIndex];
-    
+
     // Remove from selected references if it was selected
     const refKey = `${fieldKey}:${refToRemove}`;
     if (selectedReferences.has(refKey)) {
@@ -410,7 +418,7 @@ const SchemaDiscovery = () => {
       newSelected.delete(refKey);
       setSelectedReferences(newSelected);
     }
-    
+
     setFieldReferences((prev) => ({
       ...prev,
       [fieldKey]: prev[fieldKey].filter((_, i) => i !== refIndex),
@@ -520,7 +528,7 @@ const SchemaDiscovery = () => {
   const editFieldName = (fieldKey, newLabel) => {
     if (!newLabel.trim()) return;
     saveFieldsState();
-    
+
     setSchemaData((prev) => ({
       ...prev,
       schema: {
@@ -656,14 +664,14 @@ const SchemaDiscovery = () => {
 
   const deleteField = (fieldKey) => {
     saveFieldsState();
-    
+
     // Remove field from selected fields if it was selected
     if (selectedFieldKeys.has(fieldKey)) {
       const newSelected = new Set(selectedFieldKeys);
       newSelected.delete(fieldKey);
       setSelectedFieldKeys(newSelected);
     }
-    
+
     // Remove all references of this field from selected references
     const newSelectedReferences = new Set(selectedReferences);
     selectedReferences.forEach(refKey => {
@@ -672,7 +680,7 @@ const SchemaDiscovery = () => {
       }
     });
     setSelectedReferences(newSelectedReferences);
-    
+
     setFieldReferences((prev) => {
       const newRefs = { ...prev };
       delete newRefs[fieldKey];
@@ -763,14 +771,14 @@ const SchemaDiscovery = () => {
         });
       });
       setEditableTables(allTables);
-      
+
       // Show warning if using fallback keys
       if (result?.warning) {
         showError(result.warning);
       }
     } catch (err) {
       console.error('Schema discovery error:', err);
-      
+
       // Handle BYOK-specific errors
       if (err.code === 'BYOK_REQUIRED' || err.code === 'BYOK_SETUP_REQUIRED') {
         setError({
@@ -867,6 +875,71 @@ const SchemaDiscovery = () => {
     return processedEdits;
   };
 
+  const getCurrentReplacementsAndEdits = () => {
+    const replacements = [];
+    Object.entries(fieldReferences).forEach(([fieldKey, refs]) => {
+      refs.forEach((ref) => {
+        const userInput = referenceReplacements[`${fieldKey}:${ref}`];
+        if (
+          userInput &&
+          userInput.trim() &&
+          userInput.trim() !== ref.trim()
+        ) {
+          replacements.push([ref, userInput.trim()]);
+        }
+      });
+    });
+
+    const processedTableEdits = processTableEditsForAPI(tableEdits);
+    return { replacements, processedTableEdits };
+  };
+
+  const handleToggleChanges = async () => {
+    const nextShowChanges = !showChanges;
+    setShowChanges(nextShowChanges);
+    if (!nextShowChanges || !selectedDocId) {
+      return;
+    }
+
+    await generatePreviewChanges(selectedDocId);
+  };
+
+  const generatePreviewChanges = async (docId) => {
+    setIsPreviewGenerating(true);
+    try {
+      const { replacements, processedTableEdits } = getCurrentReplacementsAndEdits();
+
+      const doc = docs.find((d) => d.id === docId);
+      if (doc) {
+        let newMarkdown = doc.markdownContent || "";
+        replacements.forEach(([oldText, newText]) => {
+          newMarkdown = newMarkdown.split(oldText).join(newText);
+        });
+        setModifiedMarkdown(newMarkdown);
+      }
+
+      const blob = await generateFinalDoc(
+        docId,
+        null,
+        replacements,
+        processedTableEdits
+      );
+      setPreviewChangedBlob(blob);
+    } catch (err) {
+      console.error("Failed to generate preview changes:", err);
+      showError("Failed to generate preview with changes");
+      setShowChanges(false);
+    } finally {
+      setIsPreviewGenerating(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showChanges && selectedDocId) {
+      generatePreviewChanges(selectedDocId);
+    }
+  }, [selectedDocId, referenceReplacements, tableEdits]);
+
   const executeGenerate = async () => {
     if (selectedDocsForGenerate.size === 0) return;
 
@@ -874,21 +947,7 @@ const SchemaDiscovery = () => {
     setShowGenerateModal(false);
 
     try {
-      const replacements = [];
-      Object.entries(fieldReferences).forEach(([fieldKey, refs]) => {
-        refs.forEach((ref) => {
-          const userInput = referenceReplacements[`${fieldKey}:${ref}`];
-          if (
-            userInput &&
-            userInput.trim() &&
-            userInput.trim() !== ref.trim()
-          ) {
-            replacements.push([ref, userInput.trim()]);
-          }
-        });
-      });
-
-      const processedTableEdits = processTableEditsForAPI(tableEdits);
+      const { replacements, processedTableEdits } = getCurrentReplacementsAndEdits();
 
       const selectedDocsArray = docs.filter((d) =>
         selectedDocsForGenerate.has(d.id)
@@ -1071,7 +1130,7 @@ const SchemaDiscovery = () => {
               className="relative flex items-center justify-center gap-2 p-2.5 md:px-5 md:py-2 rounded-md bg-indigo-600 text-white 
               font-semibold hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50 
               disabled:active:scale-100 disabled:cursor-not-allowed shadow-md shadow-indigo-200"
-                >
+            >
               {isDiscovering ? (
                 <Loader2 className="animate-spin" size={20} />
               ) : (
@@ -1204,21 +1263,19 @@ const SchemaDiscovery = () => {
       <div className="flex lg:hidden bg-white border-b sticky top-0 ">
         <button
           onClick={() => setMobileMainTab("preview")}
-          className={`flex-1 py-4 text-sm font-bold border-b-2 transition-colors ${
-            mobileMainTab === "preview"
-              ? "border-indigo-600 text-indigo-600"
-              : "border-transparent text-slate-500"
-          }`}
+          className={`flex-1 py-4 text-sm font-bold border-b-2 transition-colors ${mobileMainTab === "preview"
+            ? "border-indigo-600 text-indigo-600"
+            : "border-transparent text-slate-500"
+            }`}
         >
           Preview Tab
         </button>
         <button
           onClick={() => setMobileMainTab("ops")}
-          className={`flex-1 py-4 text-sm font-bold border-b-2 transition-colors ${
-            mobileMainTab === "ops"
-              ? "border-indigo-600 text-indigo-600"
-              : "border-transparent text-slate-500"
-          }`}
+          className={`flex-1 py-4 text-sm font-bold border-b-2 transition-colors ${mobileMainTab === "ops"
+            ? "border-indigo-600 text-indigo-600"
+            : "border-transparent text-slate-500"
+            }`}
         >
           Editing Tab
         </button>
@@ -1228,17 +1285,48 @@ const SchemaDiscovery = () => {
       <div className="flex flex-1 overflow-hidden">
         {/* PREVIEW ASIDE */}
         <aside
-          className={`${
-            mobileMainTab === "ops" ? "hidden lg:flex" : "flex"
-          } lg:w-[45%] bg-white border-r flex-col h-full`}
+          className={`${mobileMainTab === "ops" ? "hidden lg:flex" : "flex"
+            } lg:w-[45%] bg-white border-r flex-col h-full`}
         >
-          <div className="px-4 py-2 border-b font-semibold text-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-white">
+          <div className="py-2 border-b font-semibold text-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-white">
             <div className="flex items-center gap-2">
-              <Eye size={16} className="text-indigo-600" />
-              <span className="whitespace-nowrap">Document Preview</span>
+              <button
+                onClick={handleToggleChanges}
+                className="p-1.5 rounded-md hover:bg-slate-100 transition-colors flex items-center justify-center group relative cursor-pointer"
+                title={showChanges ? "Hide Preview Changes" : "Show Preview Changes"}
+              >
+                {showChanges ? (
+                  <EyeOff size={16} className="text-indigo-600" />
+                ) : (
+                  <Eye size={16} className="text-slate-500 group-hover:text-indigo-600" />
+                )}
+              </button>
+              <span className="whitespace-nowrap">Document Preview {showChanges ? "(Changes)" : "(Original)"}</span>
+              {isPreviewGenerating && <Loader2 className="w-4 h-4 animate-spin text-indigo-600 ml-2" />}
             </div>
 
             <div className="flex items-center gap-2">
+              <div className="flex bg-slate-100 p-1 rounded-md border border-slate-200 mr-2">
+                <button
+                  onClick={() => setPreviewMode("markdown")}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${previewMode === "markdown"
+                    ? "bg-white text-indigo-700 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                    }`}
+                >
+                  Markdown
+                </button>
+                <button
+                  onClick={() => setPreviewMode("office")}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${previewMode === "office"
+                    ? "bg-white text-indigo-700 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                    }`}
+                >
+                  Office
+                </button>
+              </div>
+
               <button
                 onClick={() => setHighlightAll(!highlightAll)}
                 title={
@@ -1247,11 +1335,10 @@ const SchemaDiscovery = () => {
                 aria-label={
                   highlightAll ? "Hide All Highlights" : "Highlight All Fields"
                 }
-                className={`p-2 rounded-md transition-all duration-200 border ${
-                  highlightAll
-                    ? "bg-yellow-100 text-yellow-700 border-yellow-300 shadow-sm hover:cursor-pointer"
-                    : "bg-slate-100 text-slate-500 border-slate-300 hover:bg-slate-200 hover:text-slate-700 hover:cursor-pointer"
-                }`}
+                className={`p-2 rounded-md transition-all duration-200 border ${highlightAll
+                  ? "bg-yellow-100 text-yellow-700 border-yellow-300 shadow-sm hover:cursor-pointer"
+                  : "bg-slate-100 text-slate-500 border-slate-300 hover:bg-slate-200 hover:text-slate-700 hover:cursor-pointer"
+                  }`}
               >
                 <Highlighter size={18} strokeWidth={2.5} />
               </button>
@@ -1301,15 +1388,24 @@ const SchemaDiscovery = () => {
           <div className="flex-1 overflow-hidden bg-slate-50">
             <div className="bg-white max-h-screen shadow-sm overflow-auto">
               {selectedDocId ? (
-                <MarkdownPreview
-                  content={
-                    docs.find((d) => d.id === selectedDocId)?.markdownContent ||
-                    ""
-                  }
-                  highlightLocations={getHighlightLocations()}
-                  onTextSelect={handleTextSelect}
-                  isLoading={isLoadingMarkdown}
-                />
+                previewMode === "markdown" ? (
+                  <MarkdownPreview
+                    content={
+                      showChanges
+                        ? modifiedMarkdown
+                        : (docs.find((d) => d.id === selectedDocId)?.markdownContent || "")
+                    }
+                    highlightLocations={showChanges ? [] : getHighlightLocations()}
+                    onTextSelect={handleTextSelect}
+                    isLoading={isLoadingMarkdown || isPreviewGenerating}
+                  />
+                ) : (
+                  <OfficePreview
+                    docId={selectedDocId}
+                    docBlob={showChanges ? previewChangedBlob : null}
+                    isLoadingOuter={isPreviewGenerating}
+                  />
+                )
               ) : (
                 <div className="h-screen flex flex-col items-center justify-center text-slate-400 gap-2">
                   <Eye size={32} className="opacity-20" />
@@ -1322,9 +1418,8 @@ const SchemaDiscovery = () => {
 
         {/* Editing SECTION */}
         <section
-          className={`${
-            mobileMainTab === "preview" ? "hidden lg:flex" : "flex"
-          } flex-1 flex flex-col h-full bg-white`}
+          className={`${mobileMainTab === "preview" ? "hidden lg:flex" : "flex"
+            } flex-1 flex flex-col h-full bg-white`}
         >
           {/* Sub-tabs */}
           <div className="flex bg-slate-50 md:bg-white border-b overflow-x no-scrollbar">
@@ -1336,11 +1431,10 @@ const SchemaDiscovery = () => {
               <button
                 key={k}
                 onClick={() => setActiveTab(k)}
-                className={`flex-1 min-w-[100px] py-3 text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
-                  activeTab === k
-                    ? "bg-white md:bg-transparent border-b-2 border-indigo-600 text-indigo-600"
-                    : "text-slate-500 hover:bg-slate-50"
-                }`}
+                className={`flex-1 min-w-[100px] py-3 text-sm font-semibold flex items-center justify-center gap-2 transition-all ${activeTab === k
+                  ? "bg-white md:bg-transparent border-b-2 border-indigo-600 text-indigo-600"
+                  : "text-slate-500 hover:bg-slate-50"
+                  }`}
               >
                 <Icon size={16} />
                 {label}
