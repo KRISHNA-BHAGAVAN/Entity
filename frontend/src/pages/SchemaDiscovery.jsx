@@ -9,6 +9,7 @@ import {
   Download,
   Wand2,
   Eye,
+  EyeOff,
   Table,
   BarChart3,
   Save,
@@ -79,6 +80,11 @@ const SchemaDiscovery = () => {
     new Set()
   );
   const [showActionsDropdown, setShowActionsDropdown] = useState(false);
+
+  const [showChanges, setShowChanges] = useState(false);
+  const [previewChangedBlob, setPreviewChangedBlob] = useState(null);
+  const [isPreviewGenerating, setIsPreviewGenerating] = useState(false);
+  const [modifiedMarkdown, setModifiedMarkdown] = useState("");
 
   const [error, setError] = useState(null);
 
@@ -869,6 +875,71 @@ const SchemaDiscovery = () => {
     return processedEdits;
   };
 
+  const getCurrentReplacementsAndEdits = () => {
+    const replacements = [];
+    Object.entries(fieldReferences).forEach(([fieldKey, refs]) => {
+      refs.forEach((ref) => {
+        const userInput = referenceReplacements[`${fieldKey}:${ref}`];
+        if (
+          userInput &&
+          userInput.trim() &&
+          userInput.trim() !== ref.trim()
+        ) {
+          replacements.push([ref, userInput.trim()]);
+        }
+      });
+    });
+
+    const processedTableEdits = processTableEditsForAPI(tableEdits);
+    return { replacements, processedTableEdits };
+  };
+
+  const handleToggleChanges = async () => {
+    const nextShowChanges = !showChanges;
+    setShowChanges(nextShowChanges);
+    if (!nextShowChanges || !selectedDocId) {
+      return;
+    }
+
+    await generatePreviewChanges(selectedDocId);
+  };
+
+  const generatePreviewChanges = async (docId) => {
+    setIsPreviewGenerating(true);
+    try {
+      const { replacements, processedTableEdits } = getCurrentReplacementsAndEdits();
+
+      const doc = docs.find((d) => d.id === docId);
+      if (doc) {
+        let newMarkdown = doc.markdownContent || "";
+        replacements.forEach(([oldText, newText]) => {
+          newMarkdown = newMarkdown.split(oldText).join(newText);
+        });
+        setModifiedMarkdown(newMarkdown);
+      }
+
+      const blob = await generateFinalDoc(
+        docId,
+        null,
+        replacements,
+        processedTableEdits
+      );
+      setPreviewChangedBlob(blob);
+    } catch (err) {
+      console.error("Failed to generate preview changes:", err);
+      showError("Failed to generate preview with changes");
+      setShowChanges(false);
+    } finally {
+      setIsPreviewGenerating(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showChanges && selectedDocId) {
+      generatePreviewChanges(selectedDocId);
+    }
+  }, [selectedDocId, referenceReplacements, tableEdits]);
+
   const executeGenerate = async () => {
     if (selectedDocsForGenerate.size === 0) return;
 
@@ -876,21 +947,7 @@ const SchemaDiscovery = () => {
     setShowGenerateModal(false);
 
     try {
-      const replacements = [];
-      Object.entries(fieldReferences).forEach(([fieldKey, refs]) => {
-        refs.forEach((ref) => {
-          const userInput = referenceReplacements[`${fieldKey}:${ref}`];
-          if (
-            userInput &&
-            userInput.trim() &&
-            userInput.trim() !== ref.trim()
-          ) {
-            replacements.push([ref, userInput.trim()]);
-          }
-        });
-      });
-
-      const processedTableEdits = processTableEditsForAPI(tableEdits);
+      const { replacements, processedTableEdits } = getCurrentReplacementsAndEdits();
 
       const selectedDocsArray = docs.filter((d) =>
         selectedDocsForGenerate.has(d.id)
@@ -1207,8 +1264,8 @@ const SchemaDiscovery = () => {
         <button
           onClick={() => setMobileMainTab("preview")}
           className={`flex-1 py-4 text-sm font-bold border-b-2 transition-colors ${mobileMainTab === "preview"
-              ? "border-indigo-600 text-indigo-600"
-              : "border-transparent text-slate-500"
+            ? "border-indigo-600 text-indigo-600"
+            : "border-transparent text-slate-500"
             }`}
         >
           Preview Tab
@@ -1216,8 +1273,8 @@ const SchemaDiscovery = () => {
         <button
           onClick={() => setMobileMainTab("ops")}
           className={`flex-1 py-4 text-sm font-bold border-b-2 transition-colors ${mobileMainTab === "ops"
-              ? "border-indigo-600 text-indigo-600"
-              : "border-transparent text-slate-500"
+            ? "border-indigo-600 text-indigo-600"
+            : "border-transparent text-slate-500"
             }`}
         >
           Editing Tab
@@ -1231,10 +1288,21 @@ const SchemaDiscovery = () => {
           className={`${mobileMainTab === "ops" ? "hidden lg:flex" : "flex"
             } lg:w-[45%] bg-white border-r flex-col h-full`}
         >
-          <div className="px-4 py-2 border-b font-semibold text-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-white">
+          <div className="py-2 border-b font-semibold text-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-white">
             <div className="flex items-center gap-2">
-              <Eye size={16} className="text-indigo-600" />
-              <span className="whitespace-nowrap">Document Preview</span>
+              <button
+                onClick={handleToggleChanges}
+                className="p-1.5 rounded-md hover:bg-slate-100 transition-colors flex items-center justify-center group relative cursor-pointer"
+                title={showChanges ? "Hide Preview Changes" : "Show Preview Changes"}
+              >
+                {showChanges ? (
+                  <EyeOff size={16} className="text-indigo-600" />
+                ) : (
+                  <Eye size={16} className="text-slate-500 group-hover:text-indigo-600" />
+                )}
+              </button>
+              <span className="whitespace-nowrap">Document Preview {showChanges ? "(Changes)" : "(Original)"}</span>
+              {isPreviewGenerating && <Loader2 className="w-4 h-4 animate-spin text-indigo-600 ml-2" />}
             </div>
 
             <div className="flex items-center gap-2">
@@ -1242,8 +1310,8 @@ const SchemaDiscovery = () => {
                 <button
                   onClick={() => setPreviewMode("markdown")}
                   className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${previewMode === "markdown"
-                      ? "bg-white text-indigo-700 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                    ? "bg-white text-indigo-700 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                     }`}
                 >
                   Markdown
@@ -1251,8 +1319,8 @@ const SchemaDiscovery = () => {
                 <button
                   onClick={() => setPreviewMode("office")}
                   className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${previewMode === "office"
-                      ? "bg-white text-indigo-700 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                    ? "bg-white text-indigo-700 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                     }`}
                 >
                   Office
@@ -1268,8 +1336,8 @@ const SchemaDiscovery = () => {
                   highlightAll ? "Hide All Highlights" : "Highlight All Fields"
                 }
                 className={`p-2 rounded-md transition-all duration-200 border ${highlightAll
-                    ? "bg-yellow-100 text-yellow-700 border-yellow-300 shadow-sm hover:cursor-pointer"
-                    : "bg-slate-100 text-slate-500 border-slate-300 hover:bg-slate-200 hover:text-slate-700 hover:cursor-pointer"
+                  ? "bg-yellow-100 text-yellow-700 border-yellow-300 shadow-sm hover:cursor-pointer"
+                  : "bg-slate-100 text-slate-500 border-slate-300 hover:bg-slate-200 hover:text-slate-700 hover:cursor-pointer"
                   }`}
               >
                 <Highlighter size={18} strokeWidth={2.5} />
@@ -1323,15 +1391,20 @@ const SchemaDiscovery = () => {
                 previewMode === "markdown" ? (
                   <MarkdownPreview
                     content={
-                      docs.find((d) => d.id === selectedDocId)?.markdownContent ||
-                      ""
+                      showChanges
+                        ? modifiedMarkdown
+                        : (docs.find((d) => d.id === selectedDocId)?.markdownContent || "")
                     }
-                    highlightLocations={getHighlightLocations()}
+                    highlightLocations={showChanges ? [] : getHighlightLocations()}
                     onTextSelect={handleTextSelect}
-                    isLoading={isLoadingMarkdown}
+                    isLoading={isLoadingMarkdown || isPreviewGenerating}
                   />
                 ) : (
-                  <OfficePreview docId={selectedDocId} />
+                  <OfficePreview
+                    docId={selectedDocId}
+                    docBlob={showChanges ? previewChangedBlob : null}
+                    isLoadingOuter={isPreviewGenerating}
+                  />
                 )
               ) : (
                 <div className="h-screen flex flex-col items-center justify-center text-slate-400 gap-2">
@@ -1359,8 +1432,8 @@ const SchemaDiscovery = () => {
                 key={k}
                 onClick={() => setActiveTab(k)}
                 className={`flex-1 min-w-[100px] py-3 text-sm font-semibold flex items-center justify-center gap-2 transition-all ${activeTab === k
-                    ? "bg-white md:bg-transparent border-b-2 border-indigo-600 text-indigo-600"
-                    : "text-slate-500 hover:bg-slate-50"
+                  ? "bg-white md:bg-transparent border-b-2 border-indigo-600 text-indigo-600"
+                  : "text-slate-500 hover:bg-slate-50"
                   }`}
               >
                 <Icon size={16} />

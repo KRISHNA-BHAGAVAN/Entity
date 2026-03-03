@@ -3,7 +3,7 @@ import { Loader2, AlertCircle, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import * as docx from 'docx-preview';
 import { getDocBlob } from '../services/storage';
 
-const OfficePreview = ({ docId }) => {
+const OfficePreview = ({ docId, docBlob = null, isLoadingOuter = false }) => {
     const containerRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -24,8 +24,8 @@ const OfficePreview = ({ docId }) => {
             }
 
             try {
-                // Fetch the document blob
-                const blob = await getDocBlob(docId);
+                // Fetch the document blob if docBlob is not provided
+                const blob = docBlob || await getDocBlob(docId);
 
                 if (!isMounted) return;
 
@@ -61,7 +61,7 @@ const OfficePreview = ({ docId }) => {
         return () => {
             isMounted = false;
         };
-    }, [docId]);
+    }, [docId, docBlob]);
 
     const handleZoomIn = () => setScale(prev => Math.min(prev + 0.1, 2.0));
     const handleZoomOut = () => setScale(prev => Math.max(prev - 0.1, 0.3));
@@ -94,7 +94,7 @@ const OfficePreview = ({ docId }) => {
                 </button>
             </div>
 
-            {isLoading && (
+            {(isLoading || isLoadingOuter) && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-10 transition-opacity">
                     <Loader2 className="animate-spin text-indigo-600 mb-2" size={32} />
                     <p className="text-sm font-medium text-slate-600">Loading Document...</p>
