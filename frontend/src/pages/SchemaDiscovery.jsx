@@ -3,34 +3,22 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabaseClient";
 import { useToast } from "../contexts/ToastContext";
 import {
-  Loader2,
-  Sparkles,
-  LayoutTemplate,
-  Download,
-  Wand2,
-  Eye,
-  EyeOff,
-  Table,
-  BarChart3,
-  Save,
-  Highlighter,
-  FileStack,
-  ChevronDown,
-  CircleEllipsis,
+  EyeOff, Eye, Loader2, Highlighter, LayoutTemplate, Table as TableIcon,
+  BarChart3, CircleEllipsis, Save, Download, Wand2, ChevronLeft,
+  Sparkles, FileText, Settings, X, ChevronDown, CheckSquare, Search,
+  AlignLeft, Type, GripVertical
 } from "lucide-react";
-
-import { getDocs, downloadFile } from "../services/storage";
-import { discoverSchema } from "../services/aiService";
-import { generateFinalDoc } from "../services/docService";
-import { apiCall } from "../config/api";
-// import { getMarkdownFromCache } from "../services/markdownCache"; // not used
-
 import MarkdownPreview from "../components/MarkdownPreview";
 import OfficePreview from "../components/OfficePreview";
 import FieldsTab from "../components/FieldsTab";
 import TablesTab from "../components/TablesTab";
 import StatsTab from "../components/StatsTab";
 import JSZip from "jszip";
+
+import { getDocs, downloadFile } from "../services/storage";
+import { discoverSchema } from "../services/aiService";
+import { generateFinalDoc } from "../services/docService";
+import { apiCall } from "../config/api";
 // import "./DocxPreview.css";
 
 const SchemaDiscovery = () => {
@@ -87,6 +75,32 @@ const SchemaDiscovery = () => {
   const [modifiedMarkdown, setModifiedMarkdown] = useState("");
 
   const [error, setError] = useState(null);
+
+  const [leftWidth, setLeftWidth] = useState(45);
+  const [isResizing, setIsResizing] = useState(false);
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing) return;
+      const newWidth = (e.clientX / window.innerWidth) * 100;
+      if (newWidth > 20 && newWidth < 80) setLeftWidth(newWidth);
+    };
+    const handleMouseUp = () => setIsResizing(false);
+
+    if (isResizing) {
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "col-resize";
+    } else {
+      document.body.style.userSelect = "auto";
+      document.body.style.cursor = "default";
+    }
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing]);
 
   useEffect(() => {
     if (!eventId) {
@@ -1036,593 +1050,285 @@ const SchemaDiscovery = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-slate-100 overflow-hidden">
-      {/* HEADER */}
-      <div className="px-4 py-2 space-y-2 bg-white border-b">
-        <div className="flex justify-between">
-          <h2 className="text-xl mb-2 md:text-xl font-bold text-slate-800 flex items-center gap-2">
-            <Wand2 size={18} className="text-indigo-600" />
-            Schema Discovery
-          </h2>
-          <div className="flex md:flex-row md:justify-end md:items-center gap-3 w-fit md:w-fit">
-            {/* Document Selector */}
-            <div className="relative group w-auto">
-              <details className="relative appearance-none group">
-                <summary className="flex items-center w-fit justify-between p-2 md:px-4 md:py-2 border border-slate-200 rounded-md text-sm font-medium cursor-pointer bg-white hover:border-indigo-400 hover:ring-2 hover:ring-indigo-50 transition-all list-none">
-                  {/* Mobile Icon View */}
-                  <div className="flex lg:hidden items-center justify-center relative">
-                    <FileStack className="w-5 h-5 text-indigo-600" />
-                    {selectedDocs.size > 0 && (
-                      <span className="absolute -top-2 -right-2 bg-indigo-600 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full border-2 border-white">
-                        {selectedDocs.size}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Desktop Text View */}
-                  <span className="hidden lg:flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                    Select Documents ({selectedDocs.size}/{docs.length})
-                  </span>
-
-                  <ChevronDown className="hidden lg:block ml-2 w-4 h-4 text-slate-400 group-open:rotate-180 transition-transform" />
-                </summary>
-
-                {/* Dropdown Menu */}
-                <div className="absolute top-full right-0  mt-2 w-64 bg-white border border-slate-100 rounded-md shadow-xl z-20 py-1 overflow-hidden ring-1 ring-black ring-opacity-5">
-                  {isLoadingDocs ? (
-                    <div className="px-4 py-8 text-center">
-                      <Loader2 className="animate-spin text-indigo-600 mx-auto mb-2" size={20} />
-                      <p className="text-xs text-slate-500">Loading documents...</p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="px-4 py-2 border-b border-slate-100 flex justify-between">
-                        <button
-                          onClick={() =>
-                            setSelectedDocs(new Set(docs.map((d) => d.id)))
-                          }
-                          className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
-                        >
-                          Select All
-                        </button>
-                        <button
-                          onClick={() => setSelectedDocs(new Set())}
-                          className="text-xs text-slate-500 hover:text-slate-700 font-medium"
-                        >
-                          Clear All
-                        </button>
-                      </div>
-                      <div className="max-h-60 overflow-y-auto">
-                        {docs.map((doc) => (
-                          <label
-                            key={doc.id}
-                            className="flex items-center gap-3 px-4 py-2.5 hover:bg-indigo-50 cursor-pointer transition-colors group/item"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedDocs.has(doc.id)}
-                              onChange={(e) => {
-                                const newSelected = new Set(selectedDocs);
-                                if (e.target.checked) newSelected.add(doc.id);
-                                else newSelected.delete(doc.id);
-                                setSelectedDocs(newSelected);
-                              }}
-                              className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                            />
-                            <span className="text-sm font-medium text-slate-700 group-hover/item:text-indigo-700 truncate">
-                              {doc.name}
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </details>
+    <div className="flex flex-col h-screen bg-white text-slate-900 font-sans overflow-hidden">
+      {/* TOP NAVBAR */}
+      <header className="flex-none h-14 border-b border-slate-200 bg-white flex items-center justify-between px-4 z-10 shrink-0">
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate('/')} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500 transition-colors">
+            <ChevronLeft size={18} />
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
+              <FileText size={16} />
             </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold tracking-tight text-slate-900 leading-tight">Schema Discovery</span>
+              <span className="text-[11px] text-slate-500 leading-tight truncate max-w-[200px] md:max-w-xs">{event?.name || 'Loading event...'}</span>
+            </div>
+          </div>
+        </div>
 
-            {/* Discover Button */}
-            <button
-              onClick={handleDiscoverSchema}
-              disabled={isDiscovering || selectedDocs.size === 0}
-              title={schemaData ? "Re-discover Schema" : "Discover Schema"}
-              className="relative flex items-center justify-center gap-2 p-2.5 md:px-5 md:py-2 rounded-md bg-indigo-600 text-white 
-              font-semibold hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50 
-              disabled:active:scale-100 disabled:cursor-not-allowed shadow-md shadow-indigo-200"
-            >
-              {isDiscovering ? (
-                <Loader2 className="animate-spin" size={20} />
-              ) : (
-                <>
-                  <Sparkles size={20} />
-
-                  {/* Mobile Badge: Only shows when text is hidden */}
-                  {selectedDocs.size > 0 && (
-                    <span className="lg:hidden absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full border-2 border-white shadow-sm">
-                      {selectedDocs.size}
-                    </span>
-                  )}
-                </>
-              )}
-
-              {/* Desktop Text: Hidden on mobile */}
-              <span className="hidden lg:inline">
-                {schemaData ? "Re-discover" : "Discover"} Schema
-                <span className="opacity-80 text-xs font-normal ml-1">
-                  ({selectedDocs.size})
-                </span>
-              </span>
+        <div className="flex items-center gap-2 md:gap-3">
+          {/* Document Selector Header Integration */}
+          <div className="relative group">
+            <button className="flex items-center gap-2 px-3 py-1.5 rounded bg-slate-50 border border-slate-200 hover:bg-slate-100 text-sm font-medium transition-colors cursor-pointer">
+              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+              <span className="hidden sm:inline">Docs ({selectedDocs.size}/{docs.length})</span>
+              <span className="sm:hidden">{selectedDocs.size} Docs</span>
+              <ChevronDown size={14} className="text-slate-400 group-hover:rotate-180 transition-transform" />
             </button>
-
-            {/* Custom Instructions Toggle */}
-            <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={useCustomInstructions}
-                onChange={(e) => setUseCustomInstructions(e.target.checked)}
-                className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
-              />
-              <span className="hidden md:inline">Custom Instructions</span>
-              <span className="md:hidden">Custom</span>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      {/* No Documents Selected Error */}
-      {error?.type === 'no_docs_selected' && (
-        <div className="mx-4 mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex items-start gap-3">
-            <div className="shrink-0">
-              <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-semibold text-blue-800 mb-1">
-                No Documents Selected
-              </h3>
-              <p className="text-sm text-blue-700 mb-3">
-                {error.message}
-              </p>
-              <button
-                onClick={() => setError(null)}
-                className="px-3 py-1.5 bg-white text-blue-700 text-sm font-medium rounded-md border border-blue-300 hover:bg-blue-50 transition-colors"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* BYOK Error Message */}
-      {error?.type === 'byok_required' && (
-        <div className="mx-4 mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-          <div className="flex items-start gap-3">
-            <div className="shrink-0">
-              <svg className="w-5 h-5 text-amber-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-semibold text-amber-800 mb-1">
-                API Key Required
-              </h3>
-              <p className="text-sm text-amber-700 mb-3">
-                {error.message}
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => navigate('/settings/byok')}
-                  className="px-3 py-1.5 bg-amber-600 text-white text-sm font-medium rounded-md hover:bg-amber-700 transition-colors"
-                >
-                  Add API Key
-                </button>
-                <button
-                  onClick={() => setError(null)}
-                  className="px-3 py-1.5 bg-white text-amber-700 text-sm font-medium rounded-md border border-amber-300 hover:bg-amber-50 transition-colors"
-                >
-                  Dismiss
-                </button>
+            {/* Dropdown content */}
+            <div className="absolute right-0 top-full mt-1 w-64 bg-white border border-slate-200 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
+              <div className="p-2 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Select Docs</span>
+                <div className="flex gap-2">
+                  <button onClick={() => setSelectedDocs(new Set(docs.map(d => d.id)))} className="text-xs font-medium text-blue-600 hover:underline">All</button>
+                  <button onClick={() => setSelectedDocs(new Set())} className="text-xs font-medium text-slate-500 hover:underline">Clear</button>
+                </div>
+              </div>
+              <div className="max-h-60 overflow-y-auto p-1 cursor-default pointer-events-auto">
+                {docs.map(doc => (
+                  <label key={doc.id} className="flex items-center gap-2.5 p-2 hover:bg-slate-50 rounded cursor-pointer group/item pointer-events-auto">
+                    <input
+                      type="checkbox"
+                      checked={selectedDocs.has(doc.id)}
+                      onChange={(e) => {
+                        const newSet = new Set(selectedDocs);
+                        e.target.checked ? newSet.add(doc.id) : newSet.delete(doc.id);
+                        setSelectedDocs(newSet);
+                      }}
+                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer pointer-events-auto"
+                    />
+                    <span className="text-sm font-medium text-slate-700 truncate group-hover/item:text-blue-700">{doc.name}</span>
+                  </label>
+                ))}
               </div>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* General Error Message */}
-      {error && typeof error === 'string' && (
-        <div className="mx-4 mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <div className="flex items-start gap-3">
-            <div className="shrink-0">
-              <svg className="w-5 h-5 text-red-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-semibold text-red-800 mb-1">
-                Error
-              </h3>
-              <p className="text-sm text-red-700 mb-3">
-                {error}
-              </p>
-              <button
-                onClick={() => setError(null)}
-                className="px-3 py-1.5 bg-white text-red-700 text-sm font-medium rounded-md border border-red-300 hover:bg-red-50 transition-colors"
-              >
-                Dismiss
-              </button>
-            </div>
+          <div className="hidden md:block h-4 w-px bg-slate-200 mx-1"></div>
+
+          <label className="hidden sm:flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+            <input type="checkbox" checked={useCustomInstructions} onChange={e => setUseCustomInstructions(e.target.checked)} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 border-slate-300" />
+            Custom Prompt
+          </label>
+
+          <button
+            onClick={handleDiscoverSchema}
+            disabled={isDiscovering || selectedDocs.size === 0}
+            className="flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-1.5 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-blue-200"
+          >
+            {isDiscovering ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+            <span className="hidden md:inline">{schemaData ? "Re-discover" : "Discover Schema"}</span>
+            <span className="md:hidden">Run</span>
+          </button>
+        </div>
+      </header>
+
+      {/* ERROR STRIP */}
+      {error && (
+        <div className="flex-none bg-red-50 border-b border-red-200 px-4 py-2 flex items-center justify-between text-sm shrink-0">
+          <div className="flex items-center gap-2 text-red-700">
+            <circle cx="12" cy="12" r="10" className="w-4 h-4" />
+            <span className="font-medium">{typeof error === 'string' ? error : error.message}</span>
+          </div>
+          <div className="flex gap-2">
+            {error.action === 'add_key' && <button onClick={() => navigate("/settings/byok")} className="px-3 py-1 bg-red-600 text-white rounded font-medium hover:bg-red-700 transition">Add Key</button>}
+            <button onClick={() => setError(null)} className="p-1 hover:bg-red-100 rounded text-red-600 transition"><X size={16} /></button>
           </div>
         </div>
       )}
 
-      {/* MOBILE TOP NAV */}
-      <div className="flex lg:hidden bg-white border-b sticky top-0 ">
-        <button
-          onClick={() => setMobileMainTab("preview")}
-          className={`flex-1 py-4 text-sm font-bold border-b-2 transition-colors ${mobileMainTab === "preview"
-            ? "border-indigo-600 text-indigo-600"
-            : "border-transparent text-slate-500"
-            }`}
-        >
-          Preview Tab
-        </button>
-        <button
-          onClick={() => setMobileMainTab("ops")}
-          className={`flex-1 py-4 text-sm font-bold border-b-2 transition-colors ${mobileMainTab === "ops"
-            ? "border-indigo-600 text-indigo-600"
-            : "border-transparent text-slate-500"
-            }`}
-        >
-          Editing Tab
-        </button>
-      </div>
+      {/* MAIN Split View */}
+      <div className="flex-1 flex overflow-hidden lg:flex-row flex-col">
+        {/* MOBILE TABS (Hidden on LG) */}
+        <div className="flex lg:hidden bg-slate-50 border-b border-slate-200 shrink-0">
+          <button onClick={() => setMobileMainTab("preview")} className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${mobileMainTab === "preview" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500"}`}>Document View</button>
+          <button onClick={() => setMobileMainTab("ops")} className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${mobileMainTab === "ops" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500"}`}>Editor Tools</button>
+        </div>
 
-      {/* MAIN BODY */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* PREVIEW ASIDE */}
-        <aside
-          className={`${mobileMainTab === "ops" ? "hidden lg:flex" : "flex"
-            } lg:w-[45%] bg-white border-r flex-col h-full`}
-        >
-          <div className="py-2 border-b font-semibold text-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-white">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleToggleChanges}
-                className="p-1.5 rounded-md hover:bg-slate-100 transition-colors flex items-center justify-center group relative cursor-pointer"
-                title={showChanges ? "Hide Preview Changes" : "Show Preview Changes"}
-              >
-                {showChanges ? (
-                  <EyeOff size={16} className="text-indigo-600" />
-                ) : (
-                  <Eye size={16} className="text-slate-500 group-hover:text-indigo-600" />
-                )}
+        {/* LEFT PANE - PREVIEW */}
+        <div style={{ width: window.innerWidth >= 1024 ? `${leftWidth}%` : '100%' }} className={`${mobileMainTab === "ops" ? "hidden lg:flex" : "flex"} flex-col h-full overflow-hidden bg-slate-50 group`}>
+          <div className="flex-none h-12 border-b border-slate-200 bg-white flex items-center justify-between px-3 shrink-0 auto-cols-auto">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="flex bg-slate-100 p-0.5 rounded border border-slate-200">
+                <button onClick={() => setPreviewMode("markdown")} className={`px-2 md:px-3 py-1 text-xs font-semibold rounded-sm transition-all focus:outline-none ${previewMode === "markdown" ? "bg-white text-slate-800 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:text-slate-700"}`}>MD</button>
+                <button onClick={() => setPreviewMode("office")} className={`px-2 md:px-3 py-1 text-xs font-semibold rounded-sm transition-all focus:outline-none ${previewMode === "office" ? "bg-white text-slate-800 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:text-slate-700"}`}>DOCX</button>
+              </div>
+              <button onClick={handleToggleChanges} className={`p-1.5 rounded transition-colors flex items-center justify-center border outline-none ${showChanges ? 'bg-blue-50 text-blue-700 border-blue-200' : 'text-slate-500 border-transparent hover:bg-slate-100 hover:border-slate-200'}`} title="Toggle Changes">
+                {showChanges ? <EyeOff strokeWidth={2.5} size={15} /> : <Eye strokeWidth={2.5} size={15} />}
               </button>
-              <span className="whitespace-nowrap">Document Preview {showChanges ? "(Changes)" : "(Original)"}</span>
-              {isPreviewGenerating && <Loader2 className="w-4 h-4 animate-spin text-indigo-600 ml-2" />}
+              <button onClick={() => setHighlightAll(!highlightAll)} className={`p-1.5 rounded transition-colors border outline-none ${highlightAll ? 'bg-yellow-100 text-yellow-700 border-yellow-300' : 'text-slate-500 border-transparent hover:bg-slate-100 hover:border-slate-200'}`} title="Highlight All">
+                <Highlighter strokeWidth={2.5} size={15} />
+              </button>
+              {isPreviewGenerating && <Loader2 size={14} className="animate-spin text-blue-600" />}
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="flex bg-slate-100 p-1 rounded-md border border-slate-200 mr-2">
-                <button
-                  onClick={() => setPreviewMode("markdown")}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${previewMode === "markdown"
-                    ? "bg-white text-indigo-700 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
-                    }`}
-                >
-                  Markdown
-                </button>
-                <button
-                  onClick={() => setPreviewMode("office")}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${previewMode === "office"
-                    ? "bg-white text-indigo-700 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
-                    }`}
-                >
-                  Office
-                </button>
-              </div>
-
-              <button
-                onClick={() => setHighlightAll(!highlightAll)}
-                title={
-                  highlightAll ? "Hide All Highlights" : "Highlight All Fields"
-                }
-                aria-label={
-                  highlightAll ? "Hide All Highlights" : "Highlight All Fields"
-                }
-                className={`p-2 rounded-md transition-all duration-200 border ${highlightAll
-                  ? "bg-yellow-100 text-yellow-700 border-yellow-300 shadow-sm hover:cursor-pointer"
-                  : "bg-slate-100 text-slate-500 border-slate-300 hover:bg-slate-200 hover:text-slate-700 hover:cursor-pointer"
-                  }`}
-              >
-                <Highlighter size={18} strokeWidth={2.5} />
-              </button>
-
+            <div className="relative border border-slate-200 rounded text-sm bg-white overflow-hidden flex-shrink mx-2 md:max-w-[200px]">
               <select
                 value={selectedDocId || ""}
-                onChange={(e) => {
-                  setSelectedDocId(e.target.value);
-                  if (e.target.value) {
-                    setIsLoadingMarkdown(true);
-                    // Simulate loading time for markdown rendering
-                    setTimeout(() => setIsLoadingMarkdown(false), 300);
-                  }
-                }}
-                className="
-                  max-w-[200px]
-                  pl-3 pr-10 py-2 
-                  rounded-md
-                  border border-slate-300 
-                  text-sm font-medium text-slate-700
-                  appearance-none
-                  bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2364748b%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E')]
-                  bg-size-[1.25rem]
-                  bg-position-[right_0.5rem_center]
-                  bg-no-repeat
-                  bg-white
-                  focus:ring-1 focus:ring-black
-                  outline-none 
-                  transition-all duration-150 ease-in-out
-                  shadow-sm
-                  hover:border-slate-400
-                  truncate
-                "
+                onChange={(e) => { setSelectedDocId(e.target.value); setIsLoadingMarkdown(true); setTimeout(() => setIsLoadingMarkdown(false), 10); }}
+                className="w-full pl-3 pr-8 py-1.5 text-xs font-medium text-slate-700 appearance-none bg-transparent outline-none cursor-pointer"
               >
-                <option value="">Select a document…</option>
-                {docs.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name.length > 30
-                      ? `${d.name.substring(0, 30)}....`
-                      : d.name}
-                  </option>
-                ))}
+                <option value="">Select view...</option>
+                {docs.map(d => <option key={d.id} value={d.id}>{d.name.length > 25 ? d.name.substring(0, 25) + '...' : d.name}</option>)}
               </select>
+              <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             </div>
           </div>
 
-          <div className="flex-1 overflow-hidden bg-slate-50">
-            <div className="bg-white max-h-screen shadow-sm overflow-auto">
-              {selectedDocId ? (
-                previewMode === "markdown" ? (
-                  <MarkdownPreview
-                    content={
-                      showChanges
-                        ? modifiedMarkdown
-                        : (docs.find((d) => d.id === selectedDocId)?.markdownContent || "")
-                    }
-                    highlightLocations={showChanges ? [] : getHighlightLocations()}
-                    onTextSelect={handleTextSelect}
-                    isLoading={isLoadingMarkdown || isPreviewGenerating}
-                  />
-                ) : (
-                  <OfficePreview
-                    docId={selectedDocId}
-                    docBlob={showChanges ? previewChangedBlob : null}
-                    isLoadingOuter={isPreviewGenerating}
-                  />
-                )
+          <div className="flex-1 overflow-auto bg-slate-100/50 relative">
+            {selectedDocId ? (
+              previewMode === "markdown" ? (
+                <div className="max-w-4xl mx-auto bg-white my-4 md:my-6 rounded-lg shadow-sm border border-slate-200 min-h-full">
+                  <MarkdownPreview content={showChanges ? modifiedMarkdown : docs.find(d => d.id === selectedDocId)?.markdownContent || ""} highlightLocations={showChanges ? [] : getHighlightLocations()} onTextSelect={handleTextSelect} isLoading={isLoadingMarkdown || isPreviewGenerating} />
+                </div>
               ) : (
-                <div className="h-screen flex flex-col items-center justify-center text-slate-400 gap-2">
-                  <Eye size={32} className="opacity-20" />
-                  <p className="text-sm">Select a document to preview</p>
+                <div className="h-full bg-white">
+                  <OfficePreview docId={selectedDocId} docBlob={showChanges ? previewChangedBlob : null} isLoadingOuter={isPreviewGenerating} />
                 </div>
-              )}
-            </div>
+              )
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3">
+                <Search size={32} className="opacity-20 stroke-1" />
+                <p className="text-sm font-medium">Select a document from the toolbar</p>
+              </div>
+            )}
           </div>
-        </aside>
+        </div>
 
-        {/* Editing SECTION */}
-        <section
-          className={`${mobileMainTab === "preview" ? "hidden lg:flex" : "flex"
-            } flex-1 flex flex-col h-full bg-white`}
+        {/* RESIZER DRAG HANDLE (Only on Desktop) */}
+        <div
+          onMouseDown={() => setIsResizing(true)}
+          className="hidden lg:flex w-1 cursor-col-resize hover:bg-blue-500 hover:w-1.5 active:bg-blue-600 active:w-1.5 bg-slate-200 transition-all z-20 items-center justify-center flex-col gap-1 group relative -mx-[0.5px]"
         >
-          {/* Sub-tabs */}
-          <div className="flex bg-slate-50 md:bg-white border-b overflow-x no-scrollbar">
-            {[
-              ["fields", "Fields", LayoutTemplate],
-              ["tables", "Tables", Table],
-              ["stats", "Stats", BarChart3],
-            ].map(([k, label, Icon]) => (
-              <button
-                key={k}
-                onClick={() => setActiveTab(k)}
-                className={`flex-1 min-w-[100px] py-3 text-sm font-semibold flex items-center justify-center gap-2 transition-all ${activeTab === k
-                  ? "bg-white md:bg-transparent border-b-2 border-indigo-600 text-indigo-600"
-                  : "text-slate-500 hover:bg-slate-50"
-                  }`}
-              >
-                <Icon size={16} />
-                {label}
+        </div>
+
+        {/* RIGHT PANE - EDITING */}
+        <div style={{ width: window.innerWidth >= 1024 ? `${100 - leftWidth}%` : '100%' }} className={`${mobileMainTab === "preview" ? "hidden lg:flex" : "flex"} flex-col h-full overflow-hidden bg-white`}>
+          <div className="flex-none h-12 border-b border-slate-200 bg-white flex items-center justify-between pl-2 pr-3 shrink-0">
+            <div className="flex space-x-1 p-1 overflow-x-auto no-scrollbar">
+              {[
+                ["fields", "Fields", AlignLeft],
+                ["tables", "Tables", TableIcon],
+                ["stats", "Stats", BarChart3]
+              ].map(([k, label, Icon]) => (
+                <button
+                  key={k}
+                  onClick={() => setActiveTab(k)}
+                  className={`px-4 py-1.5 text-xs font-bold rounded-md flex items-center gap-2 transition-all outline-none ${activeTab === k ? "bg-blue-50 text-blue-700 ring-1 ring-blue-600/20" : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"}`}
+                >
+                  <Icon size={14} className={activeTab === k ? "text-blue-600" : ""} />
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button onClick={saveSchema} disabled={isSaving || !schemaData} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-colors disabled:opacity-50" title="Save Schema">
+                <Save size={14} /> <span className="hidden xl:inline">Save</span>
               </button>
-            ))}
-            <div className="relative actions-dropdown">
-              <button
-                onClick={() => setShowActionsDropdown(!showActionsDropdown)}
-                className="p-3 text-slate-500 hover:text-slate-700 hover:bg-slate-50 hover:cursor-pointer transition-all"
-              >
-                <CircleEllipsis size={20} />
+              <button onClick={handleGenerate} disabled={isGenerating || docs.length === 0} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors disabled:opacity-50" title="Download">
+                <Download size={14} /> <span className="hidden xl:inline">Export</span>
               </button>
-              {showActionsDropdown && (
-                <div className="absolute top-full right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-20 py-1">
-                  <button
-                    onClick={() => {
-                      saveSchema();
-                      setShowActionsDropdown(false);
-                    }}
-                    disabled={isSaving}
-                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Save size={16} className="text-indigo-600" />
-                    Save Schema
-                  </button>
-                  <button
-                    onClick={() => {
-                      handleGenerate();
-                      setShowActionsDropdown(false);
-                    }}
-                    disabled={isGenerating}
-                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Download size={16} className="text-emerald-600" />
-                    Generate
-                  </button>
-                </div>
-              )}
             </div>
           </div>
 
-          {/* Content */}
-          <div className="flex-1 overflow-y-hidden p-4 md:p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto bg-white p-4 lg:p-6 custom-scrollbar">
             {activeTab === "fields" && (
               isLoadingMarkdown ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="text-center">
-                    <Loader2 className="animate-spin text-indigo-600 mx-auto mb-2" size={24} />
-                    <p className="text-sm text-slate-500">Loading fields...</p>
-                  </div>
-                </div>
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 p-10"><Loader2 className="animate-spin mb-4" size={24} /><p className="text-sm font-medium">Parsing definitions...</p></div>
               ) : schemaData ? (
-                <FieldsTab {...fieldProps} />
+                <div className="max-w-[40rem] mx-auto origin-top animate-in fade-in slide-in-from-bottom-2 duration-300"><FieldsTab {...fieldProps} /></div>
               ) : (
-                <div className="flex items-center justify-center py-12">
-                  <div className="text-center">
-                    <Wand2 className="text-slate-300 mx-auto mb-2" size={32} />
-                    <p className="text-sm text-slate-500">No schema discovered yet</p>
-                    <p className="text-xs text-slate-400 mt-1">Select documents and click "Discover Schema" to get started</p>
-                  </div>
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 p-10 animate-in fade-in">
+                  <AlignLeft size={32} className="mb-3 opacity-20" />
+                  <p className="text-sm font-medium">Empty field list. Run discovery to populate.</p>
                 </div>
               )
             )}
             {activeTab === "tables" && (
               isLoadingMarkdown ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="text-center">
-                    <Loader2 className="animate-spin text-indigo-600 mx-auto mb-2" size={24} />
-                    <p className="text-sm text-slate-500">Loading tables...</p>
-                  </div>
-                </div>
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 p-10"><Loader2 className="animate-spin mb-4" size={24} /><p className="text-sm">Mapping tables...</p></div>
               ) : editableTables.length > 0 ? (
-                <TablesTab {...tableProps} />
+                <div className="max-w-5xl mx-auto origin-top animate-in fade-in slide-in-from-bottom-2 duration-300"><TablesTab {...tableProps} /></div>
               ) : (
-                <div className="flex items-center justify-center py-12">
-                  <div className="text-center">
-                    <Table className="text-slate-300 mx-auto mb-2" size={32} />
-                    <p className="text-sm text-slate-500">No tables found</p>
-                    <p className="text-xs text-slate-400 mt-1">Tables will appear here after schema discovery</p>
-                  </div>
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 p-10 animate-in fade-in">
+                  <TableIcon size={32} className="mb-3 opacity-20" />
+                  <p className="text-sm font-medium">No structured tables extracted.</p>
                 </div>
               )
             )}
-            {activeTab === "stats" && (
-              <StatsTab schemaData={schemaData} />
+            {activeTab === "stats" && schemaData && (
+              <div className="max-w-[40rem] mx-auto origin-top animate-in fade-in slide-in-from-bottom-2 duration-300"><StatsTab schemaData={schemaData} /></div>
             )}
           </div>
-
-
-        </section>
+        </div>
       </div>
 
-      {/* Instructions Modal */}
+      {/* MODALS OVERLAYS */}
       {showInstructionsModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">
-              Schema Discovery Instructions
-            </h3>
-            <p className="text-sm text-slate-600 mb-4">
-              Describe what fields you want to extract from your documents. Be specific about the type of information you're looking for.
-            </p>
-            <textarea
-              value={userInstructions}
-              onChange={(e) => setUserInstructions(e.target.value)}
-              placeholder="e.g., Extract event details like dates, venue, contact information, and participant details that would need to be customized for different events..."
-              className="w-full h-32 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm resize-none"
-            />
-            <div className="flex gap-3 mt-4">
-              <button
-                onClick={() => setShowInstructionsModal(false)}
-                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={executeDiscoverSchema}
-                disabled={!userInstructions.trim()}
-                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Discover Schema
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-base font-bold text-slate-900 tracking-tight">Custom Extraction Query</h3>
+              <button onClick={() => setShowInstructionsModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+            </div>
+            <div className="p-5 bg-slate-50/30">
+              <p className="text-sm text-slate-600 mb-4 font-medium">
+                Direct the AI on exactly what to extract from these documents.
+              </p>
+              <textarea
+                autoFocus
+                value={userInstructions}
+                onChange={e => setUserInstructions(e.target.value)}
+                placeholder="e.g. Extract the final settlement amount and payment schedule dates..."
+                className="w-full h-32 px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 text-sm resize-none shadow-sm transition-all"
+              />
+            </div>
+            <div className="px-5 py-4 border-t border-slate-100 flex justify-end gap-3 bg-white">
+              <button onClick={() => setShowInstructionsModal(false)} className="px-4 py-2 font-semibold text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
+              <button onClick={executeDiscoverSchema} disabled={!userInstructions.trim()} className="px-5 py-2 bg-blue-600 font-semibold text-sm text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm shadow-blue-200 flex items-center gap-2">
+                <Sparkles size={16} /> Run Discovery
               </button>
             </div>
           </div>
         </div>
       )}
-      {/* Generate Modal */}
+
       {showGenerateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">
-              Select Documents to Generate
-            </h3>
-            <div className="space-y-2 mb-4 max-h-60 overflow-y-auto">
-              {docs.map((doc) => (
-                <label
-                  key={doc.id}
-                  className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedDocsForGenerate.has(doc.id)}
-                    onChange={(e) => {
-                      const newSelected = new Set(selectedDocsForGenerate);
-                      if (e.target.checked) {
-                        newSelected.add(doc.id);
-                      } else {
-                        newSelected.delete(doc.id);
-                      }
-                      setSelectedDocsForGenerate(newSelected);
-                    }}
-                    className="w-4 h-4 text-emerald-600"
-                  />
-                  <span className="text-sm font-medium text-slate-700 truncate">
-                    {doc.name}
-                  </span>
-                </label>
-              ))}
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3 justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600"><Download size={16} /></div>
+                <h3 className="text-base font-bold text-slate-900 tracking-tight">Export Documents</h3>
+              </div>
+              <button onClick={() => setShowGenerateModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
             </div>
-            <div className="flex justify-between items-center mb-4">
-              <button
-                onClick={() =>
-                  setSelectedDocsForGenerate(new Set(docs.map((d) => d.id)))
-                }
-                className="text-xs text-emerald-600 hover:text-emerald-700"
-              >
-                Select All
-              </button>
-              <button
-                onClick={() => setSelectedDocsForGenerate(new Set())}
-                className="text-xs text-slate-500 hover:text-slate-700"
-              >
-                Clear All
-              </button>
+            <div className="p-5 flex flex-col gap-4 bg-slate-50/30">
+              <p className="text-sm font-medium text-slate-600">Select which files should be re-generated with the modified schemas.</p>
+              <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm max-h-48 overflow-y-auto">
+                {docs.map(doc => (
+                  <label key={doc.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 border-b border-slate-100 last:border-0 cursor-pointer group transition-colors">
+                    <input type="checkbox" checked={selectedDocsForGenerate.has(doc.id)} onChange={e => {
+                      const n = new Set(selectedDocsForGenerate);
+                      e.target.checked ? n.add(doc.id) : n.delete(doc.id);
+                      setSelectedDocsForGenerate(n);
+                    }} className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
+                    <span className="text-sm text-slate-700 font-medium truncate group-hover:text-slate-900">{doc.name}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex justify-between items-center text-xs px-1">
+                <button onClick={() => setSelectedDocsForGenerate(new Set(docs.map(d => d.id)))} className="font-bold text-emerald-600 hover:text-emerald-700 hover:underline transition-all">Select All</button>
+                <button onClick={() => setSelectedDocsForGenerate(new Set())} className="font-bold text-slate-500 hover:text-slate-700 hover:underline transition-all">Clear Selection</button>
+              </div>
             </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowGenerateModal(false)}
-                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={executeGenerate}
-                disabled={selectedDocsForGenerate.size === 0}
-                className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Generate ({selectedDocsForGenerate.size})
+            <div className="px-5 py-4 border-t border-slate-100 flex justify-end gap-3 bg-white">
+              <button onClick={() => setShowGenerateModal(false)} className="px-4 py-2 font-semibold text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
+              <button onClick={executeGenerate} disabled={selectedDocsForGenerate.size === 0} className="px-5 py-2 font-semibold text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-sm shadow-emerald-200 flex items-center gap-2">
+                Download ({selectedDocsForGenerate.size})
               </button>
             </div>
           </div>
