@@ -171,7 +171,7 @@ const BYOKSettings = () => {
         </p>
       </div>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+      {/* <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
         <div className="flex items-start gap-3">
           <Shield className="text-blue-600 mt-0.5" size={20} />
           <div>
@@ -184,7 +184,7 @@ const BYOKSettings = () => {
             </ul>
           </div>
         </div>
-      </div>
+      </div> */}
 
       <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6">
         <h2 className="text-lg font-semibold text-slate-800 mb-4">Add / Test API Key</h2>

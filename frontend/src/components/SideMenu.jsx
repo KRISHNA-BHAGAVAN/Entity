@@ -14,7 +14,7 @@ export default function SideMenu() {
 
   const DashboardMenuItems = [
     { icon: Trophy, path: "/", label: "Dashboard" },
-    { icon: FileText, path: "/reports", label: "Reports" },
+    { icon: FileText, path: "/reports", label: "Consolidation Report" },
   ];
 
   const isDashboardPath = DashboardMenuItems.some(

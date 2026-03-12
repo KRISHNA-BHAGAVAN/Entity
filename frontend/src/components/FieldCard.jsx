@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Undo2, Redo2, X, Plus, Edit2, Check, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Undo2, Redo2, X, Plus, Edit2, Check, Trash2 } from "lucide-react";
 
 const FieldCard = ({
   fieldKey,
@@ -34,168 +33,159 @@ const FieldCard = ({
 }) => {
   const [editingFieldName, setEditingFieldName] = useState(false);
   const [fieldNameValue, setFieldNameValue] = useState("");
-  
+
   const label = field.label || fieldKey.replace(/_/g, " ");
+
   const getRowCount = (
-  value = "",
-  minRows = 1,
-  maxRows = 10,
-  charsPerLine = 96
-) => {
-  if (!value) return minRows;
+    value = "",
+    minRows = 1,
+    maxRows = 10,
+    charsPerLine = 96
+  ) => {
+    if (!value) return minRows;
 
-  const explicitLines = value.split("\n");
+    const explicitLines = value.split("\n");
 
-  let rows = 0;
-  for (const line of explicitLines) {
-    rows += Math.max(1, Math.ceil(line.length / charsPerLine));
-  }
+    let rows = 0;
+    for (const line of explicitLines) {
+      rows += Math.max(1, Math.ceil(line.length / charsPerLine));
+    }
 
-  return Math.min(Math.max(rows, minRows), maxRows);
-};
-
-
-
+    return Math.min(Math.max(rows, minRows), maxRows);
+  };
 
   return (
     <div
-      className={`group rounded-xl border transition-all duration-300 animate-fadeIn shadow-sm ${
-        selectedFieldKeys.has(fieldKey)
-          ? "border-purple-500 bg-purple-50/30 ring-1 ring-purple-500"
-          : "border-slate-200 bg-white hover:border-slate-300"
-      }`}
+      className={`group relative flex flex-col bg-white rounded-lg border transition-all duration-200 shadow-sm ${selectedFieldKeys.has(fieldKey)
+          ? "border-blue-500 ring-1 ring-blue-500 shadow-blue-100/50 z-10"
+          : "border-slate-200 hover:border-slate-300 hover:shadow-md"
+        }`}
     >
       {/* Header Section */}
-      <div className="p-3 border-b border-slate-100 bg-slate-50/50 rounded-t-xl flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            {editingFieldName ? (
-              <input
-                autoFocus
-                value={fieldNameValue}
-                onChange={(e) => setFieldNameValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    onEditFieldName(fieldKey, fieldNameValue);
-                    setEditingFieldName(false);
-                  } else if (e.key === "Escape") {
-                    setEditingFieldName(false);
-                  }
-                }}
-                className="text-md font-bold bg-white border-b border-purple-400 py-0.5 outline-none min-w-0 flex-1"
-              />
-            ) : (
-              <>
-                <button
-                  onClick={() => onFieldSelect(fieldKey)}
-                  className={`text-md font-bold truncate transition-colors ${
-                    selectedFieldKeys.has(fieldKey)
-                      ? "text-purple-700"
-                      : "text-slate-700 hover:text-purple-600"
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-3 border-b border-slate-100 gap-3">
+        {/* Title area */}
+        <div className="flex items-center gap-3 min-w-0">
+          {editingFieldName ? (
+            <input
+              autoFocus
+              value={fieldNameValue}
+              onChange={(e) => setFieldNameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  onEditFieldName(fieldKey, fieldNameValue);
+                  setEditingFieldName(false);
+                } else if (e.key === "Escape") {
+                  setEditingFieldName(false);
+                }
+              }}
+              className="text-base font-semibold text-slate-900 bg-white border-b-2 border-blue-500 outline-none w-full max-w-[200px] transition-all"
+            />
+          ) : (
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                onClick={() => onFieldSelect(fieldKey)}
+                className={`text-base font-semibold truncate transition-colors cursor-pointer text-left ${selectedFieldKeys.has(fieldKey) ? "text-blue-700" : "text-slate-900 hover:text-blue-600"
                   }`}
-                >
-                  {label}
-                </button>
-                <button
-                  onClick={() => {
-                    setFieldNameValue(label);
-                    setEditingFieldName(true);
-                  }}
-                  className="p-1 text-slate-400 hover:text-blue-500 hover:cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <Edit2 size={12} />
-                </button>
-              </>
-            )}
-            <div className="flex items-center gap-1">
-              {field.location_count > 0 && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-200 text-slate-600">
-                  {field.location_count} locs
-                </span>
-              )}
-              {field.doc_frequency > 0 && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700">
-                  {field.doc_frequency} docs
-                </span>
-              )}
+              >
+                {label}
+              </button>
+              <button
+                onClick={() => {
+                  setFieldNameValue(label);
+                  setEditingFieldName(true);
+                }}
+                className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-50 opacity-0 group-hover:opacity-100 transition-all rounded"
+                title="Edit Field Name"
+              >
+                <Edit2 size={14} />
+              </button>
             </div>
-          </div>
+          )}
 
-          <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-            <button
-              onClick={onPrev}
-              className="p-1 rounded hover:bg-slate-200 hover:cursor-pointer"
-            >
-              <ChevronLeft size={14} />
-            </button>
-
-            <span className="tabular-nums">
-              {currentIndex + 1} / {totalFields}
-            </span>
-
-            <button
-              onClick={onNext}
-              className="p-1 rounded hover:bg-slate-200 hover:cursor-pointer"
-            >
-              <ChevronRight size={14} />
-            </button>
+          {/* Badges */}
+          <div className="flex shrink-0 gap-1.5">
+            {field.location_count > 0 && (
+              <span className="flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                {field.location_count} locs
+              </span>
+            )}
+            {field.doc_frequency > 0 && (
+              <span className="flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                {field.doc_frequency} docs
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Action Toolbar */}
-        <div className="flex items-center justify-between sm:justify-end gap-1 border-t sm:border-t-0 pt-2 sm:pt-0">
-          <div className="flex bg-white border border-slate-200 rounded-lg p-0.5 shadow-sm">
+        {/* Action Controls */}
+        <div className="flex items-center justify-between sm:justify-end gap-3">
+          <div className="flex items-center gap-1 text-xs font-medium text-slate-500 bg-slate-50 px-1 py-1 rounded-md border border-slate-200">
+            <button onClick={onPrev} className="p-1 rounded hover:bg-white hover:text-slate-900 transition-colors cursor-pointer border border-transparent hover:border-slate-200 hover:shadow-sm">
+              <ChevronLeft size={14} strokeWidth={2.5} />
+            </button>
+            <span className="w-10 text-center select-none tabular-nums text-slate-700">
+              {currentIndex + 1} / {totalFields}
+            </span>
+            <button onClick={onNext} className="p-1 rounded hover:bg-white hover:text-slate-900 transition-colors cursor-pointer border border-transparent hover:border-slate-200 hover:shadow-sm">
+              <ChevronRight size={14} strokeWidth={2.5} />
+            </button>
+          </div>
+
+          <div className="h-4 w-px bg-slate-200 hidden sm:block"></div>
+
+          <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => onUndoField(fieldKey)}
               disabled={!fieldHistory[fieldKey]?.past.length}
-              className="p-1.5 text-slate-500 hover:bg-slate-100 hover:cursor-pointer rounded-md disabled:opacity-30"
+              className="p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
+              title="Undo"
             >
-              <Undo2 size={14} />
+              <Undo2 size={16} />
             </button>
             <button
               type="button"
               onClick={() => onRedoField(fieldKey)}
               disabled={!fieldHistory[fieldKey]?.future.length}
-              className="p-1.5 text-slate-500 hover:bg-slate-100 hover:cursor-pointer rounded-md disabled:opacity-30"
+              className="p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer"
+              title="Redo"
             >
-              <Redo2 size={14} />
+              <Redo2 size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => onDeleteField(fieldKey)}
+              className="p-1.5 ml-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
+              title="Delete Field"
+            >
+              <Trash2 size={16} />
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() => onDeleteField(fieldKey)}
-            className="p-2 md:p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-          >
-            <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
-          </button>
         </div>
       </div>
 
       {/* Content Section */}
-      <div className="p-3">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-3 gap-2 px-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            References ({refs.length})
+      <div className="p-4 flex flex-col gap-4">
+        {/* References Input */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              References ({refs.length})
+            </span>
             {selectedReferences?.size > 0 && (
-              <span className="ml-2 px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-[10px] font-medium">
-                {
-                  Array.from(selectedReferences).filter((ref) =>
-                    ref.startsWith(`${fieldKey}:`)
-                  ).length
-                }{" "}
-                selected
+              <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold tracking-wide">
+                {Array.from(selectedReferences).filter((ref) => ref.startsWith(`${fieldKey}:`)).length} Selected
               </span>
             )}
-          </span>
-          <div className="flex gap-2 sm:min-w-[300px]">
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto relative">
             <input
               type="text"
               name="newref"
               value={newRefInputs[fieldKey] || ""}
               onChange={(e) => onNewRefInputChange(fieldKey, e.target.value)}
-              placeholder="New ref..."
-              className="flex-1 bg-slate-50 border-slate-200 rounded-lg px-2 py-1 text-md focus:bg-white focus:ring-1 focus:ring-black outline-none transition-all"
+              placeholder="Add new reference..."
+              className="w-full sm:w-64 bg-slate-50 border border-slate-200 rounded-md pl-3 pr-10 py-1.5 text-sm text-slate-900 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-400"
               onKeyDown={(e) =>
                 e.key === "Enter" &&
                 onAddReference(fieldKey, newRefInputs[fieldKey] || "")
@@ -203,113 +193,115 @@ const FieldCard = ({
             />
             <button
               type="button"
-              onClick={() =>
-                onAddReference(fieldKey, newRefInputs[fieldKey] || "")
-              }
+              onClick={() => onAddReference(fieldKey, newRefInputs[fieldKey] || "")}
               disabled={!(newRefInputs[fieldKey] || "").trim()}
-              className="p-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:grayscale"
+              className="absolute right-1 top-1 bottom-1 p-1 bg-white text-blue-600 hover:bg-blue-50 border border-slate-200 rounded shrink-0 disabled:opacity-50 transition-colors cursor-pointer"
             >
-              <Plus className="min-w-5 min-h-5 sm:h-4 sm:w-4" />
+              <Plus size={16} strokeWidth={2.5} />
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 max-h-[530px] overflow-y-auto">
-          {refs.map((ref, idx) => {
-            const refKey = `${fieldKey}:${ref}`;
-            const isSelected = selectedReferences?.has(refKey);
-            return (
-              <div
-                key={idx}
-                className={`group/item relative border rounded-lg p-2 transition-colors ${
-                  isSelected
-                    ? "bg-yellow-50 border-yellow-300 ring-1 ring-yellow-400"
-                    : "bg-white border-slate-200 hover:border-purple-200"
-                }`}
-              >
-                <div className="flex items-start justify-between mb-2 gap-2">
-                  {editingRef === `${fieldKey}:${idx}` ? (
-                    <input
-                      autoFocus
-                      className="flex-1 bg-white border-b border-purple-400 text-md py-0.5 outline-none"
-                      value={editRefValue}
-                      onChange={(e) => onEditRefValueChange(e.target.value)}
-                      onKeyDown={(e) =>
-                        e.key === "Enter"
-                          ? onSaveEditedReference(fieldKey, idx)
-                          : e.key === "Escape" && onCancelEdit()
-                      }
-                    />
-                  ) : (
-                    <button
-                      onClick={() => {
-                        console.log("Reference clicked:", fieldKey, ref);
-                        onReferenceSelect?.(fieldKey, ref);
-                      }}
-                      className={`flex-1 text-left font-mono text-md px-1.5 py-0.5 rounded truncate transition-colors cursor-pointer ${
-                        isSelected
-                          ? "text-yellow-800 bg-yellow-100 hover:bg-yellow-200 border border-yellow-300"
-                          : "text-purple-600 bg-purple-50 hover:bg-purple-100 border border-purple-200"
-                      }`}
-                      title={`Click to ${
-                        isSelected ? "deselect" : "select"
-                      } for highlighting (${ref})`}
-                    >
-                      {ref}
-                    </button>
-                  )}
+        {/* References List */}
+        <div className="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1">
+          {refs.length === 0 ? (
+            <div className="text-sm text-slate-400 text-center py-6 border border-dashed border-slate-200 rounded bg-slate-50/50">
+              No references added yet.
+            </div>
+          ) : (
+            refs.map((ref, idx) => {
+              const refKey = `${fieldKey}:${ref}`;
+              const isSelected = selectedReferences?.has(refKey);
 
-                  <div className="flex items-center gap-2 opacity-100 sm:opacity-0 group-hover/item:opacity-100 transition-opacity">
+              return (
+                <div
+                  key={idx}
+                  className={`group/ref flex flex-col border rounded-md transition-all duration-200 ${isSelected
+                      ? "bg-blue-50/30 border-blue-300 ring-1 ring-blue-300"
+                      : "bg-white border-slate-200 hover:border-slate-300"
+                    }`}
+                >
+                  {/* Ref Header */}
+                  <div className={`flex items-center justify-between px-3 py-2 border-b transition-colors gap-3 ${isSelected ? 'border-blue-200/50' : 'border-slate-100'}`}>
                     {editingRef === `${fieldKey}:${idx}` ? (
-                      <button
-                        type="button"
-                        onClick={() => onSaveEditedReference(fieldKey, idx)}
-                        className="p-1 text-green-600"
-                      >
-                        <Check size={12} />
-                      </button>
+                      <input
+                        autoFocus
+                        className="flex-1 bg-white border-b-2 border-blue-500 text-sm py-0.5 outline-none font-mono text-slate-900"
+                        value={editRefValue}
+                        onChange={(e) => onEditRefValueChange(e.target.value)}
+                        onKeyDown={(e) =>
+                          e.key === "Enter"
+                            ? onSaveEditedReference(fieldKey, idx)
+                            : e.key === "Escape" && onCancelEdit()
+                        }
+                      />
                     ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => onEditReference(fieldKey, idx, ref)}
-                          className="p-1 text-slate-400 hover:text-blue-500 hover:cursor-pointer"
-                        >
-                          <Edit2 size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onRemoveReference(fieldKey, idx)}
-                          className="p-1 text-slate-400 hover:text-red-500 hover:cursor-pointer"
-                        >
-                          <X size={18} />
-                        </button>
-                      </>
+                      <button
+                        onClick={() => onReferenceSelect?.(fieldKey, ref)}
+                        className={`flex-1 text-left font-mono text-sm px-2 py-1 rounded truncate transition-colors cursor-pointer ${isSelected
+                            ? "text-blue-800 bg-blue-100/50 hover:bg-blue-100"
+                            : "text-slate-700 bg-slate-50 hover:bg-slate-100"
+                          }`}
+                        title={isSelected ? "Deselect reference" : "Select reference for highlighting"}
+                      >
+                        {ref}
+                      </button>
                     )}
+
+                    {/* Controls */}
+                    <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover/ref:opacity-100 transition-opacity shrink-0">
+                      {editingRef === `${fieldKey}:${idx}` ? (
+                        <button
+                          type="button"
+                          onClick={() => onSaveEditedReference(fieldKey, idx)}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                        >
+                          <Check size={16} />
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => onEditReference(fieldKey, idx, ref)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-50 rounded transition-colors cursor-pointer"
+                            title="Edit Reference"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onRemoveReference(fieldKey, idx)}
+                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                            title="Remove Reference"
+                          >
+                            <X size={16} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Ref Body / Editor */}
+                  <div className="bg-white rounded-b-md">
+                    <textarea
+                      value={referenceReplacements[`${fieldKey}:${ref}`] || ""}
+                      onChange={(e) =>
+                        onUpdateReferenceReplacement(fieldKey, ref, e.target.value)
+                      }
+                      rows={getRowCount(
+                        referenceReplacements[`${fieldKey}:${ref}`],
+                        1,
+                        12,
+                        96
+                      )}
+                      placeholder="Replacement text... (leave empty to keep original)"
+                      className={`w-full bg-transparent border-0 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 resize-none overflow-hidden outline-none focus:ring-0 focus:bg-slate-50 transition-colors rounded-b-md`}
+                    />
                   </div>
                 </div>
-
-                <textarea
-  value={referenceReplacements[`${fieldKey}:${ref}`] || ""}
-  onChange={(e) =>
-    onUpdateReferenceReplacement(fieldKey, ref, e.target.value)
-  }
-  rows={getRowCount(
-    referenceReplacements[`${fieldKey}:${ref}`],
-    1,
-    12
-  )}
-  placeholder="Type replacement..."
-  className="w-full bg-slate-50 border-none rounded-md px-2 py-1.5 text-md
-             text-slate-700 placeholder:text-slate-400 focus:ring-1
-             focus:ring-purple-200 resize-none overflow-hidden"
-/>
-
-
-
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
     </div>
