@@ -12,7 +12,6 @@ services:
     volumes:
       - ./backend:/app
       - /app/venv
-    restart: always
 
   frontend:
     container_name: SDS-frontend
@@ -25,4 +24,3 @@ services:
       - ./frontend/.env
     depends_on:
       - backend
-    restart: always
