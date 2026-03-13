@@ -41,7 +41,7 @@ const OfficePreview = ({ docId, docBlob = null, isLoadingOuter = false }) => {
                     experimental: false,
                     trimXmlDeclaration: true,
                     useBase64URL: false,
-                    renderChanges: false,
+                    renderChanges: true,
                     renderHeaders: true,
                     renderFooters: true,
                     renderFootnotes: true,
@@ -116,8 +116,8 @@ const OfficePreview = ({ docId, docBlob = null, isLoadingOuter = false }) => {
             >
                 <div
                     ref={containerRef}
-                    className="w-full max-w-[900px] shadow-sm bg-white"
-                    style={{ minHeight: '800px' }}
+                    className="w-full max-w-[900px] shadow-sm bg-white "
+                    style={{ maxHeight: '200px' }}
                 />
             </div>
         </div>

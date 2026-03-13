@@ -49,7 +49,7 @@ const App = () => {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [navigate]);
 
   const checkSession = async () => {
     setIsLoadingSession(true);
@@ -132,8 +132,11 @@ const App = () => {
   ---------------------------- */
   if (isLoadingSession) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="animate-spin text-slate-700" size={32} />
+      <div className="h-screen flex items-center justify-center bg-white">
+        <div className="flex flex-col items-center gap-4">
+          <EntityLogo size={48} className="text-blue-600 animate-pulse" />
+          <Loader2 className="animate-spin text-slate-400" size={24} />
+        </div>
       </div>
     );
   }
@@ -147,58 +150,70 @@ const App = () => {
   ---------------------------- */
   return (
     <ToastProvider>
-      <div className="min-h-screen flex flex-col bg-slate-50">
-        {/* Header */}
-        <header className="sticky top-0 z-30 bg-white border-b">
-          <div className="max-w-10xl px-4 sm:px-6 h-10 flex items-center justify-between">
+      <div className="h-screen flex flex-col bg-white overflow-hidden font-sans text-slate-900">
+        {/* Fixed Header */}
+        <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100 flex-none">
+          <div className="max-w-[1600px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
             <div
               onClick={goHome}
-              className="flex items-center gap-3 cursor-pointer select-none"
+              className="flex items-center gap-3 cursor-pointer group transition-all"
             >
-              <EntityLogo size={25} fill="currentColor" className="text-red-500" />
-
-              <span className="text-lg font-semibold font-mono tracking-tight">
-                Smart Documentation System
-              </span>
+              <div className="p-1.5 rounded-xl bg-blue-600 group-hover:scale-110 transition-transform shadow-lg shadow-blue-100">
+                 <EntityLogo size={20} fill="white" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-bold tracking-tight text-slate-900 uppercase">
+                  Entity
+                </span>
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest hidden sm:block">
+                  Smart Docs System
+                </span>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="profile-dropdown">
+            <div className="flex items-center gap-2">
+              <div className="profile-dropdown relative">
                 <button
                   onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                  className="flex items-center gap-3"
+                  className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-full border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-all bg-white"
                 >
-                  <div className="hidden md:flex items-center gap-2 text-sm text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
-                    <UserCircle size={20} />
+                  <div className="flex items-center gap-2 px-1 text-slate-500">
+                    <span className="text-xs font-semibold hidden md:block max-w-[160px] truncate">
+                      {session.user.email}
+                    </span>
+                    <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200">
+                      <UserCircle size={18} />
+                    </div>
                   </div>
-                  <span className="max-w-40 truncate hover:cursor-pointer">
-                    {session.user.email}
-                  </span>
-                  <ChevronDown size={14} className={`transition-transform ${showProfileDropdown ? 'rotate-180' : ''}`} />
+                  <ChevronDown size={14} className={`text-slate-400 transition-transform ${showProfileDropdown ? 'rotate-180' : ''}`} />
                 </button>
 
                 {showProfileDropdown && (
-                  <div className="absolute top-full right-10 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50 py-1">
+                  <div className="absolute top-full right-0 mt-2 w-56 bg-white border border-slate-100 rounded-2xl shadow-xl shadow-slate-200/50 z-50 py-2 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="px-4 py-2 border-b border-slate-50 mb-1">
+                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Logged in as</p>
+                       <p className="text-xs font-semibold text-slate-700 truncate">{session.user.email}</p>
+                    </div>
                     <button
                       onClick={() => {
                         navigate('/settings/byok');
                         setShowProfileDropdown(false);
                       }}
-                      className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors"
                     >
-                      <Key size={16} className="text-indigo-600" />
-                      API Keys
+                      <Key size={16} />
+                      API Configuration
                     </button>
-                    <hr className="my-1" />
+                    <hr className="my-1 border-slate-50" />
                     <button
                       onClick={() => {
                         handleLogout();
                         setShowProfileDropdown(false);
                       }}
-                      className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-red-50 hover:text-red-600 transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-colors"
                     >
                       <LogOut size={16} />
-                      Logout
+                      Sign Out
                     </button>
                   </div>
                 )}
@@ -207,12 +222,12 @@ const App = () => {
           </div>
         </header>
 
-        {/* Main Layout with Sidebar */}
-        <div className="flex flex-1">
+        {/* Main Layout Container */}
+        <div className="flex flex-1 pt-14 h-full overflow-hidden">
           <SideMenu />
 
-          {/* Main Content */}
-          <main className="flex-1">
+          {/* Scrolling Content Area */}
+          <main className="flex-1 overflow-y-auto bg-white custom-scrollbar h-full relative">
             <Routes>
               <Route
                 path="/"

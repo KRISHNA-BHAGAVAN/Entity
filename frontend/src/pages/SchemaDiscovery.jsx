@@ -1184,7 +1184,7 @@ const SchemaDiscovery = () => {
                   <MarkdownPreview content={showChanges ? modifiedMarkdown : docs.find(d => d.id === selectedDocId)?.markdownContent || ""} highlightLocations={showChanges ? [] : getHighlightLocations()} onTextSelect={handleTextSelect} isLoading={isLoadingMarkdown || isPreviewGenerating} />
                 </div>
               ) : (
-                <div className="h-full bg-white">
+                <div className="h-full p-0 bg-white">
                   <OfficePreview docId={selectedDocId} docBlob={showChanges ? previewChangedBlob : null} isLoadingOuter={isPreviewGenerating} />
                 </div>
               )
