@@ -17,6 +17,7 @@ const FieldCard = ({
   editRefValue,
   referenceReplacements,
   onFieldSelect,
+  onFieldNameClick, // Add this prop
   onReferenceSelect,
   onUndoField,
   onRedoField,
@@ -83,7 +84,7 @@ const FieldCard = ({
           ) : (
             <div className="flex items-center gap-2 min-w-0">
               <button
-                onClick={() => onFieldSelect(fieldKey)}
+                onClick={() => onFieldNameClick?.(fieldKey)}
                 className={`text-base font-semibold truncate transition-colors cursor-pointer text-left ${selectedFieldKeys.has(fieldKey) ? "text-blue-700" : "text-slate-900 hover:text-blue-600"
                   }`}
               >

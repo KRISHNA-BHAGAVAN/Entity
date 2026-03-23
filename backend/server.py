@@ -18,6 +18,7 @@ from schemaModels import SchemaDiscoveryRequest
 from schemaAgent import  schema_discovery_workflow, INITIAL_STATS
 from byok_endpoints import byok_router
 from byok_service import key_broker
+from byod_endpoints import byod_router
 from report_service import (
     get_report_columns, update_report_columns, 
     generate_report_preview, resolve_event_with_docs, finalize_report_excel
@@ -41,6 +42,8 @@ app.add_middleware(
 
 # Include BYOK router
 app.include_router(byok_router)
+# Include BYOD router
+app.include_router(byod_router)
 
 # JWT Token extraction
 def get_jwt_token(authorization: Optional[str] = Header(None)):
@@ -157,6 +160,17 @@ async def update_event(event_id: str, data: dict, token: Optional[str] = Depends
 @app.delete("/events/{event_id}")
 async def remove_event(event_id: str, token: Optional[str] = Depends(get_jwt_token)):
     try:
+        supabase = get_user_supabase_client(token)
+        user_id = supabase.auth.get_user().user.id
+        from byod_service import byod_service
+        try:
+            res = supabase.table('templates').select('drive_file_id').eq('event_id', event_id).execute()
+            for doc in res.data:
+                if doc.get('drive_file_id'):
+                    byod_service.delete_from_drive(supabase, user_id, doc['drive_file_id'])
+        except Exception as e:
+            print(f"Error handling drive deletion on event deletion: {e}")
+            
         delete_event(event_id, token)
         return {"success": True}
     except Exception as e:
@@ -171,6 +185,38 @@ async def list_docs(event_id: str | None = None, token: Optional[str] = Depends(
         raise HTTPException(status_code=500, detail=str(e))
 
 import threading # Ensure this is imported at the top
+from byod_service import byod_service
+
+def async_drive_upload_worker(doc_id: str, token: str, file_name: str):
+    try:
+        supabase = get_user_supabase_client(token)
+        user_id = supabase.auth.get_user().user.id
+        
+        file_bytes = download_doc(doc_id, token)
+        
+        drive_file_id = byod_service.upload_bytes_to_drive(
+            supabase, user_id, file_bytes, file_name, 
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        
+        if drive_file_id:
+            supabase.table('templates').update({
+                'drive_file_id': drive_file_id,
+                'preview_status': 'ready'
+            }).eq('id', doc_id).execute()
+        else:
+            supabase.table('templates').update({
+                'preview_status': 'failed'
+            }).eq('id', doc_id).execute()
+    except Exception as e:
+        print(f"Drive upload failed for {doc_id}: {e}")
+        try:
+            supabase = get_user_supabase_client(token)
+            supabase.table('templates').update({
+                'preview_status': 'error'
+            }).eq('id', doc_id).execute()
+        except:
+            pass
 
 @app.post("/docs/upload-url")
 async def get_upload_url(name: str, event_id: str, token: Optional[str] = Depends(get_jwt_token)):
@@ -258,6 +304,10 @@ async def confirm_upload(data: dict, background_tasks: BackgroundTasks, token: O
                 extract_and_store_markdown_from_path, 
                 doc_id, file_path, token
             )
+            background_tasks.add_task(
+                async_drive_upload_worker, 
+                doc_id, token, data.get('name')
+            )
         
         return {"status": "success", "docId": doc_id}
         
@@ -292,6 +342,12 @@ async def update_template(doc_id: str, variables: str = Form(...), file: UploadF
 @app.delete("/docs/{doc_id}")
 async def remove_document(doc_id: str, token: Optional[str] = Depends(get_jwt_token)):
     try:
+        supabase = get_user_supabase_client(token)
+        res = supabase.table('templates').select('drive_file_id').eq('id', doc_id).execute()
+        if res.data and len(res.data) > 0 and res.data[0].get('drive_file_id'):
+            user_id = supabase.auth.get_user().user.id
+            byod_service.delete_from_drive(supabase, user_id, res.data[0]['drive_file_id'])
+            
         delete_doc(doc_id, token)
         return {"success": True}
     except Exception as e:
@@ -300,6 +356,17 @@ async def remove_document(doc_id: str, token: Optional[str] = Depends(get_jwt_to
 @app.delete("/events/{event_id}/docs")
 async def delete_all_docs(event_id: str, token: str = Depends(get_jwt_token)):
     try:
+        supabase = get_user_supabase_client(token)
+        user_id = supabase.auth.get_user().user.id
+        from byod_service import byod_service
+        try:
+            res = supabase.table('templates').select('drive_file_id').eq('event_id', event_id).execute()
+            for doc in res.data:
+                if doc.get('drive_file_id'):
+                    byod_service.delete_from_drive(supabase, user_id, doc['drive_file_id'])
+        except Exception as e:
+            print(f"Error handling drive deletion on all docs deletion: {e}")
+            
         result = delete_all_event_docs(event_id, token)
         return {"success": True, **result}
     except Exception as e:

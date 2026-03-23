@@ -276,6 +276,26 @@ const SchemaDiscovery = () => {
     loadEventAndDocs();
   }, [eventId]);
 
+  useEffect(() => {
+    let pollInterval;
+    const currentDoc = docs.find(d => d.id === selectedDocId);
+    
+    // Auto-refresh properties if the background worker hasn't finished yet
+    if (currentDoc && (!currentDoc.markdownContent || currentDoc.preview_status === 'pending')) {
+      pollInterval = setInterval(async () => {
+        try {
+          const reloaded = await getDocs(eventId);
+          // Keep the same table and schema states, just update the docs list
+          setDocs(reloaded);
+        } catch (err) {
+          console.error("Polling error:", err);
+        }
+      }, 3000);
+    }
+    
+    return () => clearInterval(pollInterval);
+  }, [docs, selectedDocId, eventId]);
+
   // Field management functions
   const saveFieldsState = () => {
     const currentState = {
@@ -586,6 +606,24 @@ const SchemaDiscovery = () => {
     setSelectedReferences(newSelected);
   };
 
+  const handleFieldNameClick = (fieldKey) => {
+    const refs = fieldReferences[fieldKey] || [];
+    const allRefs = refs.map(ref => `${fieldKey}:${ref}`);
+    const allSelected = allRefs.every(refKey => selectedReferences.has(refKey));
+    
+    const newSelected = new Set(selectedReferences);
+    
+    if (allSelected) {
+      // Deselect all references of this field
+      allRefs.forEach(refKey => newSelected.delete(refKey));
+    } else {
+      // Select all references of this field
+      allRefs.forEach(refKey => newSelected.add(refKey));
+    }
+    
+    setSelectedReferences(newSelected);
+  };
+
   const handleTextSelect = (selectedText) => {
     if (!selectedText.trim()) return;
 
@@ -638,17 +676,18 @@ const SchemaDiscovery = () => {
     return locations;
   };
 
-  const getHighlightLocations = () => {
+  const getHighlightLocations = (useChanges = false) => {
     const selectedDoc = docs.find((d) => d.id === selectedDocId);
     if (!selectedDoc) return [];
 
-    const content = selectedDoc.markdownContent || "";
+    const content = useChanges ? modifiedMarkdown : (selectedDoc.markdownContent || "");
     const allLocations = [];
 
     if (highlightAll) {
       Object.entries(fieldReferences).forEach(([fieldKey, references]) => {
         references.forEach((ref) => {
-          const locations = findTextLocations(content, ref, selectedDoc.name);
+          const searchText = useChanges ? (referenceReplacements[`${fieldKey}:${ref}`] || ref) : ref;
+          const locations = findTextLocations(content, searchText, selectedDoc.name);
           allLocations.push(...locations);
         });
       });
@@ -656,9 +695,10 @@ const SchemaDiscovery = () => {
       // Highlight individual selected references
       selectedReferences.forEach((refKey) => {
         const [fieldKey, reference] = refKey.split(":");
+        const searchText = useChanges ? (referenceReplacements[refKey] || reference) : reference;
         const locations = findTextLocations(
           content,
-          reference,
+          searchText,
           selectedDoc.name
         );
         allLocations.push(...locations);
@@ -667,7 +707,8 @@ const SchemaDiscovery = () => {
       selectedFieldKeys.forEach((fieldKey) => {
         const references = fieldReferences[fieldKey] || [];
         references.forEach((ref) => {
-          const locations = findTextLocations(content, ref, selectedDoc.name);
+          const searchText = useChanges ? (referenceReplacements[`${fieldKey}:${ref}`] || ref) : ref;
+          const locations = findTextLocations(content, searchText, selectedDoc.name);
           allLocations.push(...locations);
         });
       });
@@ -981,7 +1022,7 @@ const SchemaDiscovery = () => {
           replacements,
           processedTableEdits
         );
-        downloadFile(blob, `SCHEMA_${selectedDocsArray[0].name}`);
+        downloadFile(blob, `${selectedDocsArray[0].name}`);
       } else {
         const zip = new JSZip();
         for (const doc of selectedDocsArray) {
@@ -991,7 +1032,7 @@ const SchemaDiscovery = () => {
             replacements,
             processedTableEdits
           );
-          zip.file(`SCHEMA_${doc.name}`, blob);
+          zip.file(`${doc.name}`, blob);
         }
         downloadFile(
           await zip.generateAsync({ type: "blob" }),
@@ -1016,8 +1057,10 @@ const SchemaDiscovery = () => {
     referenceReplacements,
     newFieldName,
     highlightAll,
+    currentFieldIndex, // Pass the current field index to FieldsTab
     onFieldSelect: handleFieldSelect,
     onReferenceSelect: handleReferenceSelect,
+    onFieldNameClick: handleFieldNameClick, // Add new handler for field name clicks
     onUndoField: undoField,
     onRedoField: redoField,
     onUndoFields: undoFields,
@@ -1148,7 +1191,7 @@ const SchemaDiscovery = () => {
         </div>
 
         {/* LEFT PANE - PREVIEW */}
-        <div style={{ width: window.innerWidth >= 1024 ? `${leftWidth}%` : '100%' }} className={`${mobileMainTab === "ops" ? "hidden lg:flex" : "flex"} flex-col h-full overflow-hidden bg-slate-50 group`}>
+        <div style={{ width: window.innerWidth >= 1024 ? (previewMode === "office" ? "50%" : `${leftWidth}%`) : '100%' }} className={`${mobileMainTab === "ops" ? "hidden lg:flex" : "flex"} flex-col h-full overflow-hidden bg-slate-50 group`}>
           <div className="flex-none h-12 border-b border-slate-200 bg-white flex items-center justify-between px-3 shrink-0 auto-cols-auto">
             <div className="flex items-center gap-2 md:gap-3">
               <div className="flex bg-slate-100 p-0.5 rounded border border-slate-200">
@@ -1164,10 +1207,15 @@ const SchemaDiscovery = () => {
               {isPreviewGenerating && <Loader2 size={14} className="animate-spin text-blue-600" />}
             </div>
 
-            <div className="relative border border-slate-200 rounded text-sm bg-white overflow-hidden flex-shrink mx-2 md:max-w-[200px]">
+            <div className="relative border border-slate-200 rounded text-sm bg-white overflow-hidden shrink mx-2 md:max-w-[200px]">
               <select
                 value={selectedDocId || ""}
-                onChange={(e) => { setSelectedDocId(e.target.value); setIsLoadingMarkdown(true); setTimeout(() => setIsLoadingMarkdown(false), 10); }}
+                onChange={(e) => { 
+                  setSelectedDocId(e.target.value); 
+                  setIsLoadingMarkdown(true); 
+                  setTimeout(() => setIsLoadingMarkdown(false), 10); 
+                  // Don't reset currentFieldIndex - preserve the current field view
+                }}
                 className="w-full pl-3 pr-8 py-1.5 text-xs font-medium text-slate-700 appearance-none bg-transparent outline-none cursor-pointer"
               >
                 <option value="">Select view...</option>
@@ -1181,11 +1229,19 @@ const SchemaDiscovery = () => {
             {selectedDocId ? (
               previewMode === "markdown" ? (
                 <div className="max-w-4xl mx-auto bg-white my-4 md:my-6 rounded-lg shadow-sm border border-slate-200 min-h-full">
-                  <MarkdownPreview content={showChanges ? modifiedMarkdown : docs.find(d => d.id === selectedDocId)?.markdownContent || ""} highlightLocations={showChanges ? [] : getHighlightLocations()} onTextSelect={handleTextSelect} isLoading={isLoadingMarkdown || isPreviewGenerating} />
+                  <MarkdownPreview content={showChanges ? modifiedMarkdown : docs.find(d => d.id === selectedDocId)?.markdownContent || ""} highlightLocations={getHighlightLocations(showChanges)} onTextSelect={handleTextSelect} isLoading={isLoadingMarkdown || isPreviewGenerating} />
                 </div>
               ) : (
                 <div className="h-full p-0 bg-white">
-                  <OfficePreview docId={selectedDocId} docBlob={showChanges ? previewChangedBlob : null} isLoadingOuter={isPreviewGenerating} />
+                  <OfficePreview
+                    docId={selectedDocId}
+                    fileName={docs.find(d => d.id === selectedDocId)?.name}
+                    driveFileId={docs.find(d => d.id === selectedDocId)?.drive_file_id}
+                    previewStatus={docs.find(d => d.id === selectedDocId)?.preview_status}
+                    isLoadingOuter={isPreviewGenerating}
+                    changedBlob={previewChangedBlob}
+                    showChanges={showChanges}
+                  />
                 </div>
               )
             ) : (
@@ -1199,13 +1255,13 @@ const SchemaDiscovery = () => {
 
         {/* RESIZER DRAG HANDLE (Only on Desktop) */}
         <div
-          onMouseDown={() => setIsResizing(true)}
-          className="hidden lg:flex w-1 cursor-col-resize hover:bg-blue-500 hover:w-1.5 active:bg-blue-600 active:w-1.5 bg-slate-200 transition-all z-20 items-center justify-center flex-col gap-1 group relative -mx-[0.5px]"
+          onMouseDown={() => previewMode === "markdown" && setIsResizing(true)}
+          className={`hidden lg:flex w-1 ${previewMode === "markdown" ? "cursor-col-resize hover:bg-blue-500 hover:w-1.5 active:bg-blue-600 active:w-1.5" : ""} bg-slate-200 transition-all z-20 items-center justify-center flex-col gap-1 group relative -mx-[0.5px]`}
         >
         </div>
 
         {/* RIGHT PANE - EDITING */}
-        <div style={{ width: window.innerWidth >= 1024 ? `${100 - leftWidth}%` : '100%' }} className={`${mobileMainTab === "preview" ? "hidden lg:flex" : "flex"} flex-col h-full overflow-hidden bg-white`}>
+        <div style={{ width: window.innerWidth >= 1024 ? (previewMode === "office" ? "50%" : `${100 - leftWidth}%`) : '100%' }} className={`${mobileMainTab === "preview" ? "hidden lg:flex" : "flex"} flex-col h-full overflow-hidden bg-white`}>
           <div className="flex-none h-12 border-b border-slate-200 bg-white flex items-center justify-between pl-2 pr-3 shrink-0">
             <div className="flex space-x-1 p-1 overflow-x-auto no-scrollbar">
               {[
@@ -1239,7 +1295,7 @@ const SchemaDiscovery = () => {
               isLoadingMarkdown ? (
                 <div className="flex flex-col items-center justify-center h-full text-slate-400 p-10"><Loader2 className="animate-spin mb-4" size={24} /><p className="text-sm font-medium">Parsing definitions...</p></div>
               ) : schemaData ? (
-                <div className="max-w-[40rem] mx-auto origin-top animate-in fade-in slide-in-from-bottom-2 duration-300"><FieldsTab {...fieldProps} /></div>
+                <div className="max-w-160 mx-auto origin-top animate-in fade-in slide-in-from-bottom-2 duration-300"><FieldsTab {...fieldProps} /></div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-slate-400 p-10 animate-in fade-in">
                   <AlignLeft size={32} className="mb-3 opacity-20" />
@@ -1260,7 +1316,7 @@ const SchemaDiscovery = () => {
               )
             )}
             {activeTab === "stats" && schemaData && (
-              <div className="max-w-[40rem] mx-auto origin-top animate-in fade-in slide-in-from-bottom-2 duration-300"><StatsTab schemaData={schemaData} /></div>
+              <div className="max-w-160 mx-auto origin-top animate-in fade-in slide-in-from-bottom-2 duration-300"><StatsTab schemaData={schemaData} /></div>
             )}
           </div>
         </div>
@@ -1268,7 +1324,7 @@ const SchemaDiscovery = () => {
 
       {/* MODALS OVERLAYS */}
       {showInstructionsModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-100 p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col border border-slate-200 animate-in zoom-in-95 duration-200">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-900 tracking-tight">Custom Extraction Query</h3>
@@ -1297,7 +1353,7 @@ const SchemaDiscovery = () => {
       )}
 
       {showGenerateModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-100 p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col border border-slate-200 animate-in zoom-in-95 duration-200">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3 justify-between">
               <div className="flex items-center gap-3">
