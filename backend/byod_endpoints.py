@@ -122,22 +122,96 @@ async def set_folder(
     data: dict = Body(...),
     token: Optional[str] = Depends(get_jwt_token)
 ):
+    """Set a new Drive folder and optionally migrate existing files"""
     if not token:
         raise HTTPException(status_code=401, detail="Authentication required")
         
     folder_url = data.get("url")
+    migrate_files = data.get("migrate_files", False)
     folder_id = byod_service.extract_folder_id(folder_url)
     
     supabase = get_user_supabase_client(token)
     user = supabase.auth.get_user()
     user_id = user.user.id
     
+    # Check if Drive is connected
+    drive_connection = supabase.table('drive_connections').select('root_folder_id').eq('user_id', user_id).execute()
+    
+    if not drive_connection.data:
+        raise HTTPException(
+            status_code=400, 
+            detail="Google Drive not connected. Please connect your Google Drive account first."
+        )
+    
+    # Get old folder ID before updating
+    old_folder_id = drive_connection.data[0].get('root_folder_id') if drive_connection.data else None
+    
+    # Update to new folder
     supabase.table('drive_connections').update({
         'root_folder_id': folder_id,
         'updated_at': datetime.utcnow().isoformat()
     }).eq('user_id', user_id).execute()
     
-    return {"success": True, "folder_id": folder_id}
+    migration_result = {"migrated": 0, "failed": 0}
+    
+    if migrate_files and old_folder_id and old_folder_id != folder_id:
+        # Get all documents for this user
+        docs_result = supabase.table('templates').select('id, drive_file_id, name').eq('user_id', user_id).execute()
+        
+        for doc in docs_result.data:
+            if doc.get('drive_file_id'):
+                try:
+                    # Move file to new folder
+                    success = byod_service.move_file_to_folder(
+                        supabase, 
+                        user_id, 
+                        doc['drive_file_id'], 
+                        folder_id
+                    )
+                    if success:
+                        migration_result["migrated"] += 1
+                    else:
+                        migration_result["failed"] += 1
+                except Exception as e:
+                    print(f"Failed to migrate file {doc['name']}: {e}")
+                    migration_result["failed"] += 1
+    else:
+        # Clear drive_file_id and trigger re-upload for all documents
+        docs_result = supabase.table('templates').select('id, name, original_file_path').eq('user_id', user_id).execute()
+        
+        # Delete old files from old folder if they exist
+        for doc in docs_result.data:
+            old_drive_id_result = supabase.table('templates').select('drive_file_id').eq('id', doc['id']).execute()
+            if old_drive_id_result.data and old_drive_id_result.data[0].get('drive_file_id'):
+                try:
+                    byod_service.delete_from_drive(supabase, user_id, old_drive_id_result.data[0]['drive_file_id'])
+                except Exception as e:
+                    print(f"Failed to delete old file: {e}")
+        
+        # Clear drive_file_id and set status to pending
+        supabase.table('templates').update({
+            'drive_file_id': None,
+            'preview_status': 'pending'
+        }).eq('user_id', user_id).execute()
+        
+        # Trigger re-upload for all documents in background
+        import threading
+        from drive_upload_worker import async_drive_upload_worker
+        
+        for doc in docs_result.data:
+            if doc.get('original_file_path'):
+                thread = threading.Thread(
+                    target=async_drive_upload_worker,
+                    args=(doc['id'], token, doc['name'])
+                )
+                thread.daemon = True
+                thread.start()
+    
+    return {
+        "success": True, 
+        "folder_id": folder_id,
+        "migration": migration_result if migrate_files else None
+    }
 
 @byod_router.get("/status")
 async def get_status(token: Optional[str] = Depends(get_jwt_token)):
@@ -151,12 +225,73 @@ async def get_status(token: Optional[str] = Depends(get_jwt_token)):
     result = supabase.table('drive_connections').select('root_folder_id, updated_at').eq('user_id', user_id).execute()
     if not result.data:
         return {"connected": False}
+    
+    # Try to get user info from Google to show which account is connected
+    try:
+        creds = byod_service.get_user_credentials(supabase, user_id)
+        if creds:
+            from googleapiclient.discovery import build
+            service = build('drive', 'v3', credentials=creds)
+            about = service.about().get(fields='user').execute()
+            user_info = about.get('user', {})
+            
+            return {
+                "connected": True,
+                "folder_id": result.data[0].get('root_folder_id'),
+                "updated_at": result.data[0].get('updated_at'),
+                "email": user_info.get('emailAddress'),
+                "display_name": user_info.get('displayName')
+            }
+    except Exception as e:
+        print(f"Error getting Google account info: {e}")
         
     return {
         "connected": True,
         "folder_id": result.data[0].get('root_folder_id'),
         "updated_at": result.data[0].get('updated_at')
     }
+
+@byod_router.delete("/disconnect")
+async def disconnect_drive(token: Optional[str] = Depends(get_jwt_token)):
+    """Disconnect Google Drive and clean up all associated files"""
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+        
+    try:
+        supabase = get_user_supabase_client(token)
+        user = supabase.auth.get_user()
+        user_id = user.user.id
+        
+        # Get all documents to delete from Drive
+        docs_result = supabase.table('templates').select('id, drive_file_id, name').eq('user_id', user_id).execute()
+        
+        deleted_count = 0
+        for doc in docs_result.data:
+            if doc.get('drive_file_id'):
+                try:
+                    byod_service.delete_from_drive(supabase, user_id, doc['drive_file_id'])
+                    deleted_count += 1
+                except Exception as e:
+                    print(f"Failed to delete file {doc['name']}: {e}")
+        
+        # Clear drive_file_id from all documents
+        supabase.table('templates').update({
+            'drive_file_id': None,
+            'preview_status': 'not_configured'
+        }).eq('user_id', user_id).execute()
+        
+        # Delete the connection
+        supabase.table('drive_connections').delete().eq('user_id', user_id).execute()
+        
+        return {
+            "success": True,
+            "files_deleted": deleted_count,
+            "message": "Google Drive disconnected successfully"
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to disconnect: {str(e)}")
 
 from fastapi import UploadFile, File
 

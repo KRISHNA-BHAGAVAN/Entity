@@ -55,6 +55,7 @@ class BYODService:
     def upload_bytes_to_drive(supabase, user_id: str, file_bytes: bytes, file_name: str, mimetype: str, is_temporary: bool = False) -> Optional[str]:
         creds = BYODService.get_user_credentials(supabase, user_id)
         if not creds:
+            print(f"No Google Drive credentials found for user {user_id}")
             return None
             
         service = build('drive', 'v3', credentials=creds)
@@ -62,6 +63,9 @@ class BYODService:
         # get folder ID
         result = supabase.table('drive_connections').select('root_folder_id').eq('user_id', user_id).execute()
         folder_id = result.data[0].get('root_folder_id') if result.data else None
+        
+        if not folder_id:
+            print(f"No root folder configured for user {user_id}")
         
         file_metadata = {'name': file_name}
         if folder_id:
@@ -74,9 +78,12 @@ class BYODService:
         media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mimetype, resumable=True)
         try:
             file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+            print(f"Successfully uploaded {file_name} to Drive with ID: {file.get('id')}")
             return file.get('id')
         except Exception as e:
             print(f"Failed to upload bytes to drive: {e}")
+            import traceback
+            traceback.print_exc()
             return None
         
     @staticmethod
@@ -90,6 +97,30 @@ class BYODService:
             return True
         except Exception as e:
             print(f"Failed to delete from drive: {e}")
+            return False
+    
+    @staticmethod
+    def move_file_to_folder(supabase, user_id: str, drive_file_id: str, new_folder_id: str) -> bool:
+        """Move a file from its current location to a new folder"""
+        creds = BYODService.get_user_credentials(supabase, user_id)
+        if not creds:
+            return False
+        service = build('drive', 'v3', credentials=creds)
+        try:
+            # Get current parents
+            file = service.files().get(fileId=drive_file_id, fields='parents').execute()
+            previous_parents = ",".join(file.get('parents', []))
+            
+            # Move file to new folder
+            service.files().update(
+                fileId=drive_file_id,
+                addParents=new_folder_id,
+                removeParents=previous_parents,
+                fields='id, parents'
+            ).execute()
+            return True
+        except Exception as e:
+            print(f"Failed to move file to folder: {e}")
             return False
 
 byod_service = BYODService()

@@ -11,7 +11,9 @@ const OfficePreview = ({ docId, fileName, driveFileId, previewStatus, isLoadingO
     
     // Upload changed blob to Drive when showChanges is true
     useEffect(() => {
-        if (showChanges && changedBlob && !changedDriveFileId && !uploadingChanged) {
+        if (showChanges && changedBlob && !uploadingChanged) {
+            // Always re-upload when showChanges toggles on or changedBlob changes
+            setChangedDriveFileId(null);
             uploadChangedToGoogleDrive();
         }
         
@@ -44,11 +46,16 @@ const OfficePreview = ({ docId, fileName, driveFileId, previewStatus, isLoadingO
             if (response.ok) {
                 const data = await response.json();
                 setChangedDriveFileId(data.drive_file_id);
+                console.log('Modified document uploaded to Drive:', data.drive_file_id);
             } else {
-                console.error('Failed to upload preview:', await response.text());
+                const errorText = await response.text();
+                console.error('Failed to upload preview:', errorText);
+                // Reset showChanges if upload fails
+                setChangedDriveFileId(null);
             }
         } catch (error) {
             console.error('Failed to upload changed document:', error);
+            setChangedDriveFileId(null);
         } finally {
             setUploadingChanged(false);
         }
@@ -88,13 +95,40 @@ const OfficePreview = ({ docId, fileName, driveFileId, previewStatus, isLoadingO
          );
     }
     
-    if (previewStatus === 'error' || previewStatus === 'failed' || !driveFileId) {
+    if (previewStatus === 'not_configured') {
+         return (
+             <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#202124] text-slate-200 gap-3 z-20">
+                 <Info className="w-12 h-12 text-blue-400" />
+                 <p className="font-semibold text-slate-100">Office Preview Not Available</p>
+                 <p className="text-sm text-center max-w-sm text-slate-300">
+                     Connect your Google Drive in Settings to enable Office document preview.
+                 </p>
+                 <p className="text-xs text-slate-400 mt-2">
+                     You can still use Markdown preview mode.
+                 </p>
+             </div>
+         );
+    }
+    
+    if (previewStatus === 'error' || previewStatus === 'failed') {
          return (
              <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#202124] text-slate-200 gap-3 z-20">
                  <AlertCircle className="w-12 h-12 text-rose-400" />
                  <p className="font-semibold text-slate-100">Preview not available.</p>
                  <p className="text-sm text-center max-w-sm text-slate-300">
-                     {!driveFileId ? "Google Drive file ID is missing." : "The document failed to upload to Google Drive."}
+                     Failed to upload to Google Drive. Please ensure you've connected your Google Drive account in Settings.
+                 </p>
+             </div>
+         );
+    }
+    
+    if (!driveFileId) {
+         return (
+             <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#202124] text-slate-200 gap-3 z-20">
+                 <AlertCircle className="w-12 h-12 text-rose-400" />
+                 <p className="font-semibold text-slate-100">Preview not available.</p>
+                 <p className="text-sm text-center max-w-sm text-slate-300">
+                     Google Drive file ID is missing. The upload may still be in progress.
                  </p>
              </div>
          );

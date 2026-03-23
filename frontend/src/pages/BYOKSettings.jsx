@@ -72,16 +72,6 @@ const BYOKSettings = () => {
     try {
       const data = await apiCall('/api/byod/status');
       setDriveStatus(data);
-      if (data.connected) {
-         try {
-           const confRes = await apiCall('/api/byod/config');
-           const tokenRes = await apiCall('/api/byod/access-token');
-           setDriveConfig(confRes);
-           setDriveToken(tokenRes.access_token);
-         } catch (e) {
-           console.error("Failed to pre-fetch drive details:", e);
-         }
-      }
     } catch (err) {
       console.error('Failed to load drive status:', err);
     } finally {
@@ -333,8 +323,30 @@ const BYOKSettings = () => {
            <div className="text-sm text-slate-500 flex items-center gap-2"><Loader2 className="animate-spin" size={16} /> Checking status...</div>
         ) : driveStatus?.connected ? (
            <div className="space-y-4">
-             <div className="bg-green-50 text-green-700 p-3 rounded-md flex items-center gap-2 text-sm border border-green-200">
-               <div className="w-2 h-2 rounded-full bg-green-500"></div> Connected to Google Drive
+             <div className="bg-green-50 text-green-700 p-3 rounded-md flex items-center justify-between text-sm border border-green-200">
+               <div className="flex items-center gap-2">
+                 <div className="w-2 h-2 rounded-full bg-green-500"></div> 
+                 <span>Connected to Google Drive</span>
+                 {driveStatus.email && (
+                   <span className="text-xs bg-green-100 px-2 py-0.5 rounded font-mono">{driveStatus.email}</span>
+                 )}
+               </div>
+               <button
+                 onClick={async () => {
+                   if (confirm('Disconnect Google Drive? This will remove all uploaded files from Drive and you\'ll need to reconnect.')) {
+                     try {
+                       await apiCall('/api/byod/disconnect', { method: 'DELETE' });
+                       success('Google Drive disconnected successfully');
+                       loadDriveStatus();
+                     } catch (err) {
+                       error('Failed to disconnect: ' + err.message);
+                     }
+                   }
+                 }}
+                 className="text-xs text-red-600 hover:text-red-700 font-medium underline"
+               >
+                 Disconnect
+               </button>
              </div>
              <div>
                <label className="block text-sm font-medium text-slate-700 mb-2">Drive Folder Settings</label>
@@ -353,26 +365,42 @@ const BYOKSettings = () => {
                </div>
 
                {showManualFolderInput && (
-                 <div className="mt-4 p-4 border border-slate-200 rounded-md bg-slate-50 flex flex-col md:flex-row gap-3 items-end">
-                   <div className="flex-1 w-full">
-                     <label className="block text-sm font-medium text-slate-700 mb-1">
-                       Manual Folder Link or ID
-                     </label>
-                     <input
-                       type="text"
-                       value={manualFolderLink}
-                       onChange={(e) => setManualFolderLink(e.target.value)}
-                       placeholder="https://drive.google.com/drive/folders/..."
-                       className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                     />
+                 <div className="mt-4 p-4 border border-slate-200 rounded-md bg-slate-50">
+                   <div className="flex flex-col gap-3">
+                     <div className="flex-1 w-full">
+                       <label className="block text-sm font-medium text-slate-700 mb-1">
+                         Manual Folder Link or ID
+                       </label>
+                       <input
+                         type="text"
+                         value={manualFolderLink}
+                         onChange={(e) => setManualFolderLink(e.target.value)}
+                         placeholder="https://drive.google.com/drive/folders/..."
+                         className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                       />
+                       <p className="text-xs text-slate-500 mt-1">
+                         Make sure the folder is owned by or shared with: <span className="font-semibold">{driveStatus.email || 'your connected account'}</span>
+                       </p>
+                     </div>
+                     <div className="flex gap-2">
+                       <button
+                         onClick={handleSetManualFolder}
+                         disabled={isSettingManualFolder || !manualFolderLink.trim()}
+                         className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[100px]"
+                       >
+                         {isSettingManualFolder ? <Loader2 size={16} className="animate-spin" /> : 'Save Link'}
+                       </button>
+                       <button
+                         onClick={() => {
+                           setShowManualFolderInput(false);
+                           setManualFolderLink('');
+                         }}
+                         className="px-4 py-2 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200"
+                       >
+                         Cancel
+                       </button>
+                     </div>
                    </div>
-                   <button
-                     onClick={handleSetManualFolder}
-                     disabled={isSettingManualFolder || !manualFolderLink.trim()}
-                     className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[100px]"
-                   >
-                     {isSettingManualFolder ? <Loader2 size={16} className="animate-spin" /> : 'Save Link'}
-                   </button>
                  </div>
                )}
              </div>

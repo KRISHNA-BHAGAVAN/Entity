@@ -186,37 +186,7 @@ async def list_docs(event_id: str | None = None, token: Optional[str] = Depends(
 
 import threading # Ensure this is imported at the top
 from byod_service import byod_service
-
-def async_drive_upload_worker(doc_id: str, token: str, file_name: str):
-    try:
-        supabase = get_user_supabase_client(token)
-        user_id = supabase.auth.get_user().user.id
-        
-        file_bytes = download_doc(doc_id, token)
-        
-        drive_file_id = byod_service.upload_bytes_to_drive(
-            supabase, user_id, file_bytes, file_name, 
-            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
-        
-        if drive_file_id:
-            supabase.table('templates').update({
-                'drive_file_id': drive_file_id,
-                'preview_status': 'ready'
-            }).eq('id', doc_id).execute()
-        else:
-            supabase.table('templates').update({
-                'preview_status': 'failed'
-            }).eq('id', doc_id).execute()
-    except Exception as e:
-        print(f"Drive upload failed for {doc_id}: {e}")
-        try:
-            supabase = get_user_supabase_client(token)
-            supabase.table('templates').update({
-                'preview_status': 'error'
-            }).eq('id', doc_id).execute()
-        except:
-            pass
+from drive_upload_worker import async_drive_upload_worker
 
 @app.post("/docs/upload-url")
 async def get_upload_url(name: str, event_id: str, token: Optional[str] = Depends(get_jwt_token)):
@@ -285,7 +255,9 @@ async def confirm_upload(data: dict, background_tasks: BackgroundTasks, token: O
                 'template_file_path': file_path,
                 'upload_date': datetime.now().isoformat(),
                 'markdown_content': None,
-                'table_data': []
+                'table_data': [],
+                'preview_status': 'pending',
+                'drive_file_id': None
             })
 
         try:
@@ -304,10 +276,24 @@ async def confirm_upload(data: dict, background_tasks: BackgroundTasks, token: O
                 extract_and_store_markdown_from_path, 
                 doc_id, file_path, token
             )
-            background_tasks.add_task(
-                async_drive_upload_worker, 
-                doc_id, token, data.get('name')
-            )
+            
+            # Only attempt Drive upload if user has Drive configured
+            try:
+                user_id = supabase.auth.get_user().user.id
+                drive_check = supabase.table('drive_connections').select('id').eq('user_id', user_id).execute()
+                if drive_check.data:
+                    background_tasks.add_task(
+                        async_drive_upload_worker, 
+                        doc_id, token, data.get('name')
+                    )
+                else:
+                    # Mark as not available if Drive not configured
+                    supabase.table('templates').update({
+                        'preview_status': 'not_configured',
+                        'drive_file_id': None
+                    }).eq('id', doc_id).execute()
+            except Exception as e:
+                print(f"Error checking Drive configuration: {e}")
         
         return {"status": "success", "docId": doc_id}
         
