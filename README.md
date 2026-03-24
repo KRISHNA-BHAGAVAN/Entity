@@ -18,6 +18,7 @@ Unlike traditional mail-merge tools that require manual placeholder setup, **Ent
 - 💎 **Preserve formatting** perfectly while replacing content
 - 📊 **Generate consolidated reports** across multiple events and documents
 - 🔐 **Secure BYOK architecture** - your API keys, your control
+- ☁️ **Bring Your Own Drive (BYOD)** - Seamlessly connect and sync documents to your Google Drive
 
 ---
 
@@ -69,6 +70,12 @@ Experience your documents exactly as they appear in Microsoft Word:
 - Model validation before storage
 - Complete audit trail
 
+### 7. **Bring Your Own Drive (BYOD)**
+- Securely connect your Google Drive account using OAuth2
+- Automatic upload of generated `.docx` and preview documents to your selected Drive folder
+- Real-time connection status and document syncing
+- Disconnect anytime with automatic cleanup of Drive configurations
+
 ---
 
 ## 🛠️ Tech Stack
@@ -90,7 +97,8 @@ Experience your documents exactly as they appear in Microsoft Word:
 | FastAPI | High-performance API framework |
 | LangChain + LangGraph | AI orchestration |
 | Python-DOCX | Document manipulation |
-| Supabase | Auth, DB, Storage |
+| Supabase | Auth, DB, Local Storage |
+| Google Drive API | BYOD cloud file syncing |
 | Redis (optional) | Schema caching |
 | Cryptography | API key encryption |
 
@@ -282,6 +290,9 @@ Smart Documentation System/
 ├── backend/
 │   ├── server.py              # Main FastAPI application
 │   ├── schemaAgent.py         # LangGraph AI workflow
+│   ├── byod_service.py        # Google Drive BYOD logic
+│   ├── byod_endpoints.py      # BYOD API routes
+│   ├── drive_upload_worker.py # Background upload worker
 │   ├── byok_service.py        # API key management
 │   ├── byok_encryption.py     # Encryption utilities
 │   ├── byok_providers.py      # LLM provider adapters
@@ -360,6 +371,13 @@ All endpoints require JWT token in `Authorization: Bearer <token>` header
 - `POST /api/byok/validate` - Validate key
 - `DELETE /api/byok/{provider}` - Revoke key
 
+### BYOD (Drive Integration)
+- `POST /api/byod/auth/url` - Get Google OAuth2 URL
+- `POST /api/byod/auth/callback` - Handle OAuth2 callback
+- `POST /api/byod/folder` - Set target Drive folder
+- `GET /api/byod/status` - Get Drive connection status
+- `DELETE /api/byod/disconnect` - Disconnect Drive
+
 ---
 
 ## 🧪 Testing
@@ -407,7 +425,7 @@ python test_byok_enforcement.py
 - [ ] Real-time collaboration on schemas
 - [ ] Template marketplace
 - [ ] API usage analytics dashboard
-- [ ] Integration with Google Drive/OneDrive
+- [ ] Integration with OneDrive (Google Drive completed)
 
 ---
 
@@ -419,11 +437,8 @@ This project is provided as-is for educational and internal use.
 
 ## 👥 Contributors
 
-**Development Team:**
-- 22A91A61F9
-- 22A91A6188  
-- 22A91A61A4
-- 22A91A61F2
+**Developed By:**
+- Krishna Bhagavan
 
 **Based on Research:**  
 *"LLM-Based Multi-Agent Generation of Semi-Structured Documents in the Public Administration Domain"* (Musumeci et al., 2024)
@@ -433,9 +448,8 @@ This project is provided as-is for educational and internal use.
 ## 📞 Support
 
 For issues and questions:
-1. Check existing documentation (`BYOK_ENFORCEMENT.md`, `PRESENTATION.md`)
-2. Review API docs at `/swagger`
-3. Contact development team
+1. Review API docs at `/swagger`
+2. Contact development team
 
 ---
 

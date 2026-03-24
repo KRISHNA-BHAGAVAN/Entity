@@ -5,6 +5,7 @@ from typing import Dict, Any, List, TypedDict, Optional, Literal
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import StateGraph, START, END
 from byok_providers import get_provider_adapter
+from pydantic import BaseModel, Field, create_model
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -26,6 +27,8 @@ Task:
 - Use semantic reasoning. For example, "Speaker" might map to "Resources Person" or "Coordinator" in the schema.
 - If a column value cannot be confidently inferred from the context, mark it as UNRESOLVED.
 - Do NOT hallucinate.
+- Follow the column's description (hint) if provided. The description is the user's intent and should constrain the output.
+- Prefer exactly the format/style as specified in the description(hints) for the given column_name.
 
 Output:
 - STRICT JSON format.
@@ -132,19 +135,49 @@ def inference_node(state: ReportState) -> Dict[str, Any]:
             SystemMessage(content=prompt),
             HumanMessage(content=user_message)
         ]
-        
-        response = llm.invoke(messages)
-        content = response.content.strip()
-        
-        # Parse JSON response
-        start = content.find("{")
-        end = content.rfind("}") + 1
-        if start != -1 and end != -1:
-            json_str = content[start:end]
-            data = json.loads(json_str)
-        else:
-            logger.error(f"Failed to parse JSON from LLM response: {content}")
-            data = {}
+
+        # Structured output: enforce keys matching the configured column names (including spaces/casing).
+        field_defs: Dict[str, tuple[Any, Any]] = {}
+        for idx, col in enumerate(columns):
+            col_name = col["name"]
+            hint = col.get("description")
+            internal_name = f"col_{idx}"
+            field_defs[internal_name] = (
+                Optional[str],
+                Field(
+                    default=None,
+                    alias=col_name,
+                    description=(
+                        f"Value for '{col_name}'. "
+                        + (f"Hint: {hint}. " if hint else "")
+                        + "Return a short, presentation-ready value. Use null if unresolved."
+                    ),
+                ),
+            )
+
+        DynamicOut: type[BaseModel] = create_model(  # type: ignore[assignment]
+            "DynamicReportInference",
+            **field_defs,
+        )
+
+        try:
+            structured_llm = llm.with_structured_output(DynamicOut)
+            result_obj = structured_llm.invoke(messages)
+            data = result_obj.model_dump(by_alias=True)
+        except Exception as e:
+            logger.warning(f"Structured output failed, falling back to JSON parsing: {e}")
+            response = llm.invoke(messages)
+            content = (response.content or "").strip()
+
+            # Parse JSON response
+            start = content.find("{")
+            end = content.rfind("}") + 1
+            if start != -1 and end != -1:
+                json_str = content[start:end]
+                data = json.loads(json_str)
+            else:
+                logger.error(f"Failed to parse JSON from LLM response: {content}")
+                data = {}
 
         # Identify unresolved columns (null values)
         unresolved = [k for k, v in data.items() if v is None]
@@ -152,6 +185,7 @@ def inference_node(state: ReportState) -> Dict[str, Any]:
         # Ensure all columns are present
         final_data = {col['name']: data.get(col['name'], None) for col in columns}
         
+        print(f"Inference result: {final_data}, Unresolved: {unresolved}")
         return {
             "inferred_data": final_data, 
             "unresolved_columns": unresolved

@@ -100,10 +100,17 @@ const ColumnConfig = () => {
 
     const handleResolutionComplete = async (resolvedRows) => {
         const allRows = [...(reportData.rows || []), ...resolvedRows];
-        setReportData(prev => ({ ...prev, rows: allRows }));
+        
+        // Renumber S.No for all rows
+        const renumberedRows = allRows.map((row, index) => ({
+            ...row,
+            'S.No': index + 1
+        }));
+        
+        setReportData(prev => ({ ...prev, rows: renumberedRows }));
         setStatus('success');
         const columnNames = reportData.columns.map(c => c.name);
-        await downloadExcel(columnNames, allRows);
+        await downloadExcel(columnNames, renumberedRows);
         setShowUnresolvedModal(false);
     };
 
