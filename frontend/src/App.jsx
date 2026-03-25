@@ -8,6 +8,7 @@ import Dashboard from "./pages/Dashboard";
 import Uploads from "./pages/Uploads";
 import SchemaDiscovery from "./pages/SchemaDiscovery";
 import BYOKSettings from "./pages/BYOKSettings";
+import BYODCallback from "./pages/BYODCallback";
 // import EventDetail from "./pages/EventDetail";
 import EntityLogo from "./components/logo";
 import Reports from "./pages/Reports";
@@ -134,7 +135,7 @@ const App = () => {
     return (
       <div className="h-screen flex items-center justify-center bg-white">
         <div className="flex flex-col items-center gap-4">
-          <EntityLogo size={48} className="text-blue-600 animate-pulse" />
+          <EntityLogo size={48} className="text-blue-800 animate-pulse" />
           <Loader2 className="animate-spin text-slate-400" size={24} />
         </div>
       </div>
@@ -158,8 +159,8 @@ const App = () => {
               onClick={goHome}
               className="flex items-center gap-3 cursor-pointer group transition-all"
             >
-              <div className="p-1.5 rounded-xl bg-blue-600 group-hover:scale-110 transition-transform shadow-lg shadow-blue-100">
-                 <EntityLogo size={20} fill="white" />
+              <div className="rounded-md bg-white group-hover:scale-110 transition-transform border border-blue-200 shadow-md shadow-blue-200">
+                 <EntityLogo size={30} fill="black" />
               </div>
               <div className="flex flex-col">
                 <span className="text-sm font-bold tracking-tight text-slate-900 uppercase">
@@ -255,6 +256,10 @@ const App = () => {
               <Route
                 path="/settings/byok"
                 element={<BYOKSettings />}
+              />
+              <Route
+                path="/settings/byod/callback"
+                element={<BYODCallback />}
               />
             </Routes>
           </main>

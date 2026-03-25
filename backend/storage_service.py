@@ -96,7 +96,9 @@ def get_docs(event_id: Optional[str] = None, jwt_token: Optional[str] = None) ->
             'templateFilePath': d['template_file_path'],
             'uploadDate': d['upload_date'],
             'markdownContent': d.get('markdown_content', ''),
-            'tableData': d.get('table_data', [])
+            'tableData': d.get('table_data', []),
+            'drive_file_id': d.get('drive_file_id'),
+            'preview_status': d.get('preview_status')
         } for d in result.data]
     except Exception as e:
         print(f"Error in get_docs: {e}")
@@ -164,7 +166,8 @@ def upload_doc(event_id: str, name: str, file_bytes: bytes, jwt_token: Optional[
         'original_file_path': file_path,
         'template_file_path': file_path,
         'upload_date': datetime.now().isoformat(),
-        'markdown_content': None  # Will be updated by background task
+        'markdown_content': None,  # Will be updated by background task
+        'preview_status': 'pending' # Initial UI state
     }
     
     if user_id:

@@ -11,7 +11,9 @@ import {
   Trash2,
   RefreshCw,
   ChevronDown,
-  Plus
+  Plus,
+  HardDrive,
+  FolderOpen
 } from 'lucide-react';
 
 const PROVIDERS = {
@@ -46,6 +48,15 @@ const BYOKSettings = () => {
   const [validatingProvider, setValidatingProvider] = useState('');
   const [revokingProvider, setRevokingProvider] = useState('');
 
+  const [driveStatus, setDriveStatus] = useState(null);
+  const [driveLoading, setDriveLoading] = useState(true);
+  const [driveConfig, setDriveConfig] = useState(null);
+  const [driveToken, setDriveToken] = useState(null);
+  const [isSettingFolder, setIsSettingFolder] = useState(false);
+  const [showManualFolderInput, setShowManualFolderInput] = useState(false);
+  const [manualFolderLink, setManualFolderLink] = useState('');
+  const [isSettingManualFolder, setIsSettingManualFolder] = useState(false);
+
   const loadProviders = async () => {
     try {
       const data = await apiCall('/api/byok');
@@ -54,6 +65,17 @@ const BYOKSettings = () => {
       error('Failed to load API keys');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDriveStatus = async () => {
+    try {
+      const data = await apiCall('/api/byod/status');
+      setDriveStatus(data);
+    } catch (err) {
+      console.error('Failed to load drive status:', err);
+    } finally {
+      setDriveLoading(false);
     }
   };
 
@@ -124,6 +146,111 @@ const BYOKSettings = () => {
     }
   };
 
+  const connectDrive = async () => {
+    try {
+      const data = await apiCall('/api/byod/auth/url', {
+        method: 'POST',
+        body: JSON.stringify({ redirect_uri: window.location.origin + '/settings/byod/callback' })
+      });
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      error('Failed to get Google authorization URL');
+    }
+  };
+
+  const handleChooseFolder = () => {
+    try {
+      if (!driveConfig?.client_id || !driveToken) {
+        throw new Error("Missing Google configuration or access token.");
+      }
+
+      setIsSettingFolder(true);
+      
+      const loadScript = (src) => new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) {
+          resolve();
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.body.appendChild(script);
+      });
+
+      const launchPicker = () => {
+        const view = new window.google.picker.DocsView(window.google.picker.ViewId.FOLDERS)
+          .setIncludeFolders(true)
+          .setSelectFolderEnabled(true);
+
+        const picker = new window.google.picker.PickerBuilder()
+          .addView(view)
+          .setAppId(driveConfig.client_id.split('-')[0])
+          .setOAuthToken(driveToken)
+          .setCallback(async (data) => {
+            if (data.action === window.google.picker.Action.CANCEL) {
+              setIsSettingFolder(false);
+            }
+            if (data.action === window.google.picker.Action.PICKED) {
+              const folder = data.docs[0];
+              try {
+                await apiCall('/api/byod/folder', {
+                  method: 'POST',
+                  body: JSON.stringify({ url: folder.id })
+                });
+                success('Drive folder selected successfully');
+                loadDriveStatus();
+              } catch (err) {
+                error('Failed to set Drive folder: ' + err.message);
+              } finally {
+                setIsSettingFolder(false);
+              }
+            }
+          })
+          .build();
+        picker.setVisible(true);
+      };
+
+      loadScript('https://apis.google.com/js/api.js')
+        .then(() => {
+          window.gapi.load('picker', { callback: launchPicker });
+        })
+        .catch((err) => {
+          setIsSettingFolder(false);
+          error("Failed to load Google Picker APIs. Please disable adblockers for this site.");
+        });
+
+    } catch (err) {
+      error('Failed to open Google Drive picker: ' + err.message);
+      setIsSettingFolder(false);
+    }
+  };
+
+  const handleSetManualFolder = async () => {
+    if (!manualFolderLink.trim()) {
+      error("Please enter a valid folder link or ID");
+      return;
+    }
+    
+    setIsSettingManualFolder(true);
+    try {
+      await apiCall('/api/byod/folder', {
+        method: 'POST',
+        body: JSON.stringify({ url: manualFolderLink.trim() })
+      });
+      success('Drive folder linked successfully');
+      setManualFolderLink('');
+      setShowManualFolderInput(false);
+      loadDriveStatus();
+    } catch (err) {
+      error('Failed to set Drive folder: ' + err.message);
+    } finally {
+      setIsSettingManualFolder(false);
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'active': return 'text-green-600 bg-green-100';
@@ -139,6 +266,7 @@ const BYOKSettings = () => {
 
   useEffect(() => {
     loadProviders();
+    loadDriveStatus();
   }, []);
 
   // Reset model selection when provider changes
@@ -185,6 +313,107 @@ const BYOKSettings = () => {
           </div>
         </div>
       </div> */}
+
+      <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6">
+        <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+           <HardDrive className="text-indigo-600" size={20} />
+           Google Drive Integration (BYOD)
+        </h2>
+        {driveLoading ? (
+           <div className="text-sm text-slate-500 flex items-center gap-2"><Loader2 className="animate-spin" size={16} /> Checking status...</div>
+        ) : driveStatus?.connected ? (
+           <div className="space-y-4">
+             <div className="bg-green-50 text-green-700 p-3 rounded-md flex items-center justify-between text-sm border border-green-200">
+               <div className="flex items-center gap-2">
+                 <div className="w-2 h-2 rounded-full bg-green-500"></div> 
+                 <span>Connected to Google Drive</span>
+                 {driveStatus.email && (
+                   <span className="text-xs bg-green-100 px-2 py-0.5 rounded font-mono">{driveStatus.email}</span>
+                 )}
+               </div>
+               <button
+                 onClick={async () => {
+                   if (confirm('Disconnect Google Drive? This will remove all uploaded files from Drive and you\'ll need to reconnect.')) {
+                     try {
+                       await apiCall('/api/byod/disconnect', { method: 'DELETE' });
+                       success('Google Drive disconnected successfully');
+                       loadDriveStatus();
+                     } catch (err) {
+                       error('Failed to disconnect: ' + err.message);
+                     }
+                   }
+                 }}
+                 className="text-xs text-red-600 hover:text-red-700 font-medium underline"
+               >
+                 Disconnect
+               </button>
+             </div>
+             <div>
+               <label className="block text-sm font-medium text-slate-700 mb-2">Drive Folder Settings</label>
+               {driveStatus.folder_id ? (
+                 <p className="text-sm text-slate-600 mb-2">Current Root Folder ID: <span className="font-mono bg-slate-100 px-1 rounded">{driveStatus.folder_id}</span></p>
+               ) : (
+                 <p className="text-sm text-amber-600 mb-2">No folder set. Please choose a folder to store documents.</p>
+               )}
+               <div className="flex gap-2">
+                 <button 
+                   onClick={() => setShowManualFolderInput(!showManualFolderInput)}
+                   className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-md hover:bg-slate-200 transition"
+                 >
+                   Provide Folder Link
+                 </button>
+               </div>
+
+               {showManualFolderInput && (
+                 <div className="mt-4 p-4 border border-slate-200 rounded-md bg-slate-50">
+                   <div className="flex flex-col gap-3">
+                     <div className="flex-1 w-full">
+                       <label className="block text-sm font-medium text-slate-700 mb-1">
+                         Manual Folder Link or ID
+                       </label>
+                       <input
+                         type="text"
+                         value={manualFolderLink}
+                         onChange={(e) => setManualFolderLink(e.target.value)}
+                         placeholder="https://drive.google.com/drive/folders/..."
+                         className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                       />
+                       <p className="text-xs text-slate-500 mt-1">
+                         Make sure the folder is owned by or shared with: <span className="font-semibold">{driveStatus.email || 'your connected account'}</span>
+                       </p>
+                     </div>
+                     <div className="flex gap-2">
+                       <button
+                         onClick={handleSetManualFolder}
+                         disabled={isSettingManualFolder || !manualFolderLink.trim()}
+                         className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[100px]"
+                       >
+                         {isSettingManualFolder ? <Loader2 size={16} className="animate-spin" /> : 'Save Link'}
+                       </button>
+                       <button
+                         onClick={() => {
+                           setShowManualFolderInput(false);
+                           setManualFolderLink('');
+                         }}
+                         className="px-4 py-2 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200"
+                       >
+                         Cancel
+                       </button>
+                     </div>
+                   </div>
+                 </div>
+               )}
+             </div>
+           </div>
+        ) : (
+           <div className="space-y-4">
+             <p className="text-sm text-slate-600">Connect your Google Drive account to enable document previews and cloud storage.</p>
+             <button onClick={connectDrive} className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition">
+               Connect Google Drive
+             </button>
+           </div>
+        )}
+      </div>
 
       <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6">
         <h2 className="text-lg font-semibold text-slate-800 mb-4">Add / Test API Key</h2>

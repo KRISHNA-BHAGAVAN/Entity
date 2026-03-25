@@ -19,3 +19,45 @@ html, body {
   animation: fadeIn 0.25s ease-out;
 }
 
+.gdoc-scrollbar {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.6) transparent;
+}
+
+.gdoc-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.gdoc-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.gdoc-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.gdoc-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.75);
+}
+
+.gdoc-docx-root {
+  width: 100%;
+}
+
+.gdoc-docx-root .docx-wrapper {
+  background: transparent;
+}
+
+.gdoc-docx-root .docx-wrapper > section,
+.gdoc-docx-root .docx > section,
+.gdoc-docx-root .docx-page {
+  background: #ffffff;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.35);
+  border-radius: 4px;
+  margin: 0 auto 24px;
+}

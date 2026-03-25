@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus, Undo2, Redo2 } from 'lucide-react';
 import FieldCard from './FieldCard';
 
@@ -17,6 +17,7 @@ const FieldsTab = ({
   highlightAll,
   onFieldSelect,
   onReferenceSelect,
+  onFieldNameClick, // Add this prop
   onUndoField,
   onRedoField,
   onUndoFields,
@@ -35,6 +36,7 @@ const FieldsTab = ({
   onHighlightAllToggle,
   onCurrentFieldIndexChange,
   onEditFieldName,
+  currentFieldIndex, // Add this prop to receive from parent
 }) => {
 
   const fieldEntries = useMemo(
@@ -43,30 +45,44 @@ const FieldsTab = ({
   );
 
   const totalFields = fieldEntries.length;
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(currentFieldIndex || 0);
+
+  // Sync with parent's currentFieldIndex when it changes externally
+  useEffect(() => {
+    if (currentFieldIndex !== undefined && currentFieldIndex !== currentIndex) {
+      setCurrentIndex(currentFieldIndex);
+    }
+  }, [currentFieldIndex]);
+
+  // Notify parent when local index changes
+  useEffect(() => {
+    if (currentIndex !== currentFieldIndex) {
+      onCurrentFieldIndexChange?.(currentIndex);
+    }
+  }, [currentIndex]);
 
   const goPrev = () => {
     const newIndex = currentIndex === 0 ? totalFields - 1 : currentIndex - 1;
     setCurrentIndex(newIndex);
-    onCurrentFieldIndexChange?.(newIndex);
   };
 
   const goNext = () => {
     const newIndex = currentIndex === totalFields - 1 ? 0 : currentIndex + 1;
     setCurrentIndex(newIndex);
-    onCurrentFieldIndexChange?.(newIndex);
   };
 
   const currentEntry = fieldEntries[currentIndex] || [];
 
   // Reset currentIndex if it's out of bounds after deletion
-  if (currentIndex >= totalFields && totalFields > 0) {
-    setCurrentIndex(0);
-  }
+  useEffect(() => {
+    if (currentIndex >= totalFields && totalFields > 0) {
+      setCurrentIndex(0);
+    }
+  }, [currentIndex, totalFields]);
 
   return (
     <>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
         <div className="flex flex-wrap gap-2">
           <input
             value={newFieldName}
@@ -182,7 +198,7 @@ const FieldsTab = ({
                 editingRef={editingRef}
                 editRefValue={editRefValue}
                 referenceReplacements={referenceReplacements}
-                onFieldSelect={onFieldSelect}
+                onFieldNameClick={onFieldNameClick}
                 onReferenceSelect={onReferenceSelect}
                 onUndoField={onUndoField}
                 onRedoField={onRedoField}

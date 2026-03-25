@@ -56,7 +56,9 @@ export const getDocs = async (eventId) => {
     variables: d.variables || [],
     uploadDate: new Date(d.uploadDate).getTime(),
     markdownContent: d.markdownContent,
-    tableData: d.tableData || []
+    tableData: d.tableData || [],
+    drive_file_id: d.drive_file_id,
+    preview_status: d.preview_status
   }));
 };
 
