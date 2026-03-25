@@ -174,11 +174,7 @@ BUCKET_NAME=your_storage_bucket_name
 # Master encryption key (generate once)
 MASTER_KEY=generate_using_generate_master_key.py
 
-# Optional fallback keys (system-level)
-GROQ_API_KEY=your_groq_key
-OPENAI_API_KEY=your_openai_key  
-GOOGLE_API_KEY=your_gemini_key
-```
+
 
 **Generate master encryption key:**
 ```bash

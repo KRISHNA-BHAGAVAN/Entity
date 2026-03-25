@@ -27,7 +27,6 @@ class BYOKKeyBroker:
         Returns (llm_instance, metadata) where metadata contains key source info
         """
         user_key_found = False
-        fallback_used = False
         
         try:
             # Try to get user's key first
@@ -71,37 +70,8 @@ class BYOKKeyBroker:
         if strict_byok and not user_key_found:
             raise ValueError(f"BYOK_REQUIRED: No API key found for provider '{provider}'. Please add your API key in Settings.")
         
-        # Fallback to .env keys (admin/system mode)
-        try:
-            llm = self._get_fallback_llm(provider, model, **options)
-            fallback_used = True
-            return llm, {
-                'key_source': 'fallback',
-                'user_key_found': False,
-                'fallback_used': True
-            }
-        except Exception as e:
-            # Both user key and fallback failed
-            raise ValueError(f"BYOK_SETUP_REQUIRED: No API keys available for provider '{provider}'. Please add your API key in Settings to continue.")
-    
-    def _get_fallback_llm(self, provider: str, model: str, **options) -> Any:
-        """Fallback to .env keys"""
-        env_key_map = {
-            'openai': 'OPENAI_API_KEY',
-            'gemini': 'GOOGLE_API_KEY', 
-            'groq': 'GROQ_API_KEY'
-        }
-        
-        env_key = env_key_map.get(provider)
-        if not env_key:
-            raise ValueError(f"No fallback key configured for provider: {provider}")
-        
-        api_key = os.getenv(env_key)
-        if not api_key:
-            raise ValueError(f"No fallback API key available for provider: {provider}")
-        
-        adapter = get_provider_adapter(provider)
-        return adapter.create_llm(api_key, model, **options)
+        # We no longer fallback to .env keys. Enforce BYOK only.
+        raise ValueError(f"BYOK_SETUP_REQUIRED: No API keys available for provider '{provider}'. Please add your API key in Settings to continue.")
     
     def _log_audit(self, supabase, user_id: str, provider: str, action: str, metadata: dict = None):
         """Log audit event"""

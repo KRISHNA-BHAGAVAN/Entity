@@ -489,9 +489,7 @@ async def discover_schema(req: SchemaDiscoveryRequest, token: Optional[str] = De
         f"✅ Generated from {stats.get('docs_processed', 0)} docs",
     }
     
-    # Add warning if using fallback keys
-    if key_metadata.get('fallback_used'):
-        response["warning"] = "Using system fallback API keys. Add your own keys in Settings for better control."
+
 
     llm_summary = stats.get("llm", {}).get("summary", {})
     if llm_summary.get("llm_calls", 0) > 0:
