@@ -31,6 +31,8 @@ export const useAgentStream = ({ eventIds }) => {
   const [threadId, setThreadId] = useState(null);
   const [error, setError] = useState(null);
   const [activeTool, setActiveTool] = useState(null);
+  const [activityByMessage, setActivityByMessage] = useState({});
+  const [streamingAssistantId, setStreamingAssistantId] = useState(null);
 
   const abortRef = useRef(null);
 
@@ -59,6 +61,8 @@ export const useAgentStream = ({ eventIds }) => {
     };
 
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    setActivityByMessage((prev) => ({ ...prev, [assistantId]: [] }));
+    setStreamingAssistantId(assistantId);
 
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -120,6 +124,27 @@ export const useAgentStream = ({ eventIds }) => {
             return;
           }
 
+          if (event.type === "thinking") {
+            const label = (event.content || "Thinking").trim();
+            setActivityByMessage((prev) => ({
+              ...prev,
+              [assistantId]: [
+                ...(prev[assistantId] || []),
+                {
+                  id: crypto.randomUUID(),
+                  kind: "thinking",
+                  label,
+                  ts: Date.now(),
+                },
+              ],
+            }));
+            return;
+          }
+
+          if (event.type === "thinking_done") {
+            return;
+          }
+
           if (event.type === "tool_start") {
             if (!sawToolStart) {
               sawToolStart = true;
@@ -132,11 +157,31 @@ export const useAgentStream = ({ eventIds }) => {
               );
             }
             setActiveTool(event.content || "tool");
+            setActivityByMessage((prev) => ({
+              ...prev,
+              [assistantId]: [
+                ...(prev[assistantId] || []),
+                {
+                  id: crypto.randomUUID(),
+                  kind: "tool_start",
+                  label: `Calling ${event.content || "tool"}`,
+                  ts: Date.now(),
+                },
+              ],
+            }));
             return;
           }
 
           if (event.type === "tool_end") {
             setActiveTool(null);
+            setActivityByMessage((prev) => ({
+              ...prev,
+              [assistantId]: [
+                ...(prev[assistantId] || []).filter((entry) =>
+                  !(entry.kind === "tool_start" && entry.label === `Calling ${event.content || "tool"}`)
+                ),
+              ],
+            }));
             return;
           }
 
@@ -153,6 +198,7 @@ export const useAgentStream = ({ eventIds }) => {
       abortRef.current = null;
       setIsLoading(false);
       setActiveTool(null);
+      setStreamingAssistantId(null);
     }
   };
 
@@ -162,12 +208,15 @@ export const useAgentStream = ({ eventIds }) => {
       abortRef.current = null;
     }
     setIsLoading(false);
+    setStreamingAssistantId(null);
   };
 
   const resetConversation = async () => {
     setMessages([]);
     setError(null);
     setActiveTool(null);
+    setActivityByMessage({});
+    setStreamingAssistantId(null);
 
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -199,6 +248,8 @@ export const useAgentStream = ({ eventIds }) => {
     isLoading,
     error,
     activeTool,
+    activityByMessage,
+    streamingAssistantId,
     canSend,
     sendMessage,
     stopStreaming,

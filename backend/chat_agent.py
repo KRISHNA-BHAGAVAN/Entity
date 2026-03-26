@@ -1,6 +1,6 @@
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from langchain.agents import create_agent
@@ -234,6 +234,24 @@ def _chunk_to_text(chunk: Any) -> str:
     return ""
 
 
+def _extract_reasoning_text(chunk: Any) -> str:
+    additional = getattr(chunk, "additional_kwargs", {}) or {}
+
+    candidates: List[str] = []
+    for key in ("reasoning", "reasoning_content", "thinking", "thought"):
+        value = additional.get(key)
+        if isinstance(value, str) and value.strip():
+            candidates.append(value.strip())
+
+    if not candidates:
+        return ""
+
+    text = candidates[0]
+    if len(text) > 220:
+        text = f"{text[:220]}..."
+    return text
+
+
 def build_agent_for_user(
     user_id: str,
     jwt_token: str,
@@ -263,7 +281,12 @@ def build_agent_for_user(
         "You are an event-document analysis assistant. "
         "Answer only using data fetched via tools from events/templates for the current authenticated user. "
         "If you cannot find data, clearly say so. "
+        "If the user asks to list events or available events, call list_events. "
+        "If the user asks about a specific table, document, or value but no event scope is provided, "
+        "ask a clarifying question (for example, which event or document) instead of saying it is not available. "
+        "Once the user provides an event, proceed to fetch data. "
         "Always prioritize factual extraction from available markdown/table context and mention event/document names when possible."
+        f"Current date is {datetime.now(timezone.utc)}."
     )
 
     agent = create_agent(
@@ -278,7 +301,7 @@ def build_agent_for_user(
         **key_metadata,
         "provider": provider,
         "model": model,
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
     }
     return agent, metadata
 
@@ -290,6 +313,7 @@ async def stream_agent_response(
 ):
     config = {"configurable": {"thread_id": thread_id}}
     payload = {"messages": [{"role": "user", "content": user_message}]}
+    last_reasoning_text = ""
 
     async for event in agent.astream_events(payload, config=config, version="v2"):
         event_name = event.get("event")
@@ -301,7 +325,13 @@ async def stream_agent_response(
             # and only stream tokens from the main graph model node.
             if metadata.get("langgraph_node") != "model":
                 continue
-            token_text = _chunk_to_text(event_data.get("chunk"))
+            chunk = event_data.get("chunk")
+            reasoning_text = _extract_reasoning_text(chunk)
+            if reasoning_text and reasoning_text != last_reasoning_text:
+                last_reasoning_text = reasoning_text
+                yield {"type": "thinking", "content": reasoning_text}
+
+            token_text = _chunk_to_text(chunk)
             if token_text:
                 yield {"type": "token", "content": token_text}
         elif event_name == "on_tool_start":
