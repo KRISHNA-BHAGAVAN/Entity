@@ -23,6 +23,7 @@ from report_service import (
     get_report_columns, update_report_columns, 
     generate_report_preview, resolve_event_with_docs, finalize_report_excel
 )
+from chat_agent import build_agent_for_user, stream_agent_response
 
 # Set up the FastAPI app and add routes
 app = FastAPI(
@@ -536,6 +537,95 @@ class ReportGenerateRequest(BaseModel):
     start_date: str
     end_date: str
     columns: List[Dict[str, Any]] # name and description
+
+
+class ChatStreamRequest(BaseModel):
+    message: str
+    event_ids: Optional[List[str]] = None
+    thread_id: Optional[str] = None
+
+
+class ChatResetRequest(BaseModel):
+    thread_id: Optional[str] = None
+
+
+def _sse_data(payload: Dict[str, Any]) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+@app.post("/chat/stream")
+async def chat_stream(req: ChatStreamRequest, token: Optional[str] = Depends(get_jwt_token)):
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    message = (req.message or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message is required")
+
+    try:
+        supabase = get_user_supabase_client(token)
+        user_id = supabase.auth.get_user().user.id
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication token")
+
+    try:
+        agent, key_metadata = build_agent_for_user(
+            user_id=user_id,
+            jwt_token=token,
+            event_ids=req.event_ids,
+        )
+    except ValueError as e:
+        error_msg = str(e)
+        if "BYOK_REQUIRED" in error_msg or "BYOK_SETUP_REQUIRED" in error_msg:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "BYOK_REQUIRED",
+                    "message": "Please add and validate your BYOK key in Settings before using Agent Chat.",
+                    "action": "setup_keys",
+                },
+            )
+        raise HTTPException(status_code=500, detail=error_msg)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to initialize chat agent: {str(e)}")
+
+    thread_id = req.thread_id or str(uuid.uuid4())
+
+    async def event_stream():
+        yield _sse_data(
+            {
+                "type": "meta",
+                "thread_id": thread_id,
+                "key_info": key_metadata,
+            }
+        )
+        try:
+            async for chunk in stream_agent_response(
+                agent=agent,
+                user_message=message,
+                thread_id=thread_id,
+            ):
+                yield _sse_data(chunk)
+            yield _sse_data({"type": "done", "thread_id": thread_id})
+        except Exception as e:
+            yield _sse_data({"type": "error", "message": str(e), "thread_id": thread_id})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.post("/chat/reset")
+async def chat_reset(req: ChatResetRequest, token: Optional[str] = Depends(get_jwt_token)):
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return {"reset": True, "thread_id": str(uuid.uuid4())}
 
 @app.post("/report/generate")
 async def generate_report(req: ReportGenerateRequest, token: Optional[str] = Depends(get_jwt_token)):

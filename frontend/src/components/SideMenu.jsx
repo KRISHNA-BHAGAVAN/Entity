@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Upload, Database, FileText, Trophy } from "lucide-react";
+import { Upload, Database, FileText, Trophy, MessageSquare } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 
 export default function SideMenu() {
@@ -15,6 +15,7 @@ export default function SideMenu() {
   const DashboardMenuItems = [
     { icon: Trophy, path: "/", label: "Dashboard" },
     { icon: FileText, path: "/reports", label: "Consolidation Report" },
+    { icon: MessageSquare, path: "/agent-chat", label: "Agent Chat" },
   ];
 
   const isDashboardPath = DashboardMenuItems.some(
@@ -25,7 +26,7 @@ export default function SideMenu() {
 
   return (
     <div
-      className={`bg-white border-r border-slate-200 flex flex-col gap-1 p-1.5 h-screen overflow-hidden shrink-0 relative z-10 transition-[width] duration-280 ease-in-out ${isExpanded ? "w-[200px]" : "w-[48px]"
+      className={`bg-white border-r border-slate-200 flex flex-col gap-1 p-1.5 h-full sticky top-14 overflow-hidden shrink-0 relative z-10 transition-[width] duration-280 ease-in-out ${isExpanded ? "w-[200px]" : "w-[48px]"
         }`}
       onMouseEnter={() => setIsExpanded(true)}
       onMouseLeave={() => setIsExpanded(false)}

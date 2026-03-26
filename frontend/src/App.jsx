@@ -9,6 +9,7 @@ import Uploads from "./pages/Uploads";
 import SchemaDiscovery from "./pages/SchemaDiscovery";
 import BYOKSettings from "./pages/BYOKSettings";
 import BYODCallback from "./pages/BYODCallback";
+import AgentChat from "./pages/AgentChat";
 // import EventDetail from "./pages/EventDetail";
 import EntityLogo from "./components/logo";
 import Reports from "./pages/Reports";
@@ -224,11 +225,11 @@ const App = () => {
         </header>
 
         {/* Main Layout Container */}
-        <div className="flex flex-1 pt-14 h-full overflow-hidden">
+        <div className="flex flex-1 pt-14 min-h-0 overflow-hidden">
           <SideMenu />
 
           {/* Scrolling Content Area */}
-          <main className="flex-1 overflow-y-auto bg-white custom-scrollbar h-full relative">
+          <main className="flex-1 min-w-0 min-h-0 overflow-y-auto bg-white custom-scrollbar relative">
             <Routes>
               <Route
                 path="/"
@@ -244,6 +245,10 @@ const App = () => {
               <Route
                 path="/reports"
                 element={<Reports />}
+              />
+              <Route
+                path="/agent-chat"
+                element={<AgentChat />}
               />
               <Route
                 path="/uploads"
