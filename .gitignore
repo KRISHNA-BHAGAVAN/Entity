@@ -191,7 +191,7 @@ current_state.png
 .agent
 .amazonq
 .amazonq/rules
-.amazonq/rules/consider.md
+.agents
 example-docs
 test*
 DEV_CONTEXT.md
