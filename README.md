@@ -66,6 +66,7 @@ Experience your documents exactly as they appear in Microsoft Word:
 - Token streaming responses
 - @-driven event scope selection inside the chat input
 - Lightweight processing hints (thinking/tool usage)
+- **Personalized Experience**: The agent greets and addresses you by the name provided during registration.
 
 ### 7. **Bring Your Own Key (BYOK)**
 - Securely store your own API keys for:
@@ -406,7 +407,7 @@ python test_byok_enforcement.py
 ```
 
 ### Manual Testing Checklist
-- [ ] User registration and login
+- [ ] User registration (with full name) and login
 - [ ] Event creation and management
 - [ ] Document upload (check duplicates)
 - [ ] Schema discovery with different models

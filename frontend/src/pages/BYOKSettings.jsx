@@ -614,7 +614,7 @@ const BYOKSettings = () => {
             <ul className="text-sm text-amber-700 mt-1 space-y-1">
               <li>• When you click "Test & Add Key", your key and model are validated with a real API call</li>
               <li>• Revoking a key will immediately disable it for all operations</li>
-              <li>• If no user key is available, the system falls back to admin keys</li>
+              <li>• Make sure to enter the exact model name provided in the llm_provider documentation</li>
               <li>• Custom models are validated to ensure they're supported by the provider</li>
             </ul>
           </div>

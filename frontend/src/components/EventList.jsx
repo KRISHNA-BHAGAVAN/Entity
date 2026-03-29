@@ -168,7 +168,7 @@ const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
           className="flex items-center gap-2 bg-blue-600 text-white px-4 py-1.5 rounded-md text-sm font-bold hover:bg-blue-700 shadow-sm active:scale-95 transition-all"
         >
           <Plus size={16} />
-          <span>New Project</span>
+          <span>New Event</span>
         </button>
       </div>
 

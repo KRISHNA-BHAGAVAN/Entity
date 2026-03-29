@@ -10,6 +10,7 @@ import SchemaDiscovery from "./pages/SchemaDiscovery";
 import BYOKSettings from "./pages/BYOKSettings";
 import BYODCallback from "./pages/BYODCallback";
 import AgentChat from "./pages/AgentChat";
+import EventAgent from "./pages/EventAgent";
 // import EventDetail from "./pages/EventDetail";
 import EntityLogo from "./components/logo";
 import Reports from "./pages/Reports";
@@ -257,6 +258,10 @@ const App = () => {
               <Route
                 path="/schema-discovery"
                 element={<SchemaDiscovery />}
+              />
+              <Route
+                path="/event-agent"
+                element={<EventAgent />}
               />
               <Route
                 path="/settings/byok"

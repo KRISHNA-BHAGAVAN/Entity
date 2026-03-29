@@ -267,6 +267,10 @@ def build_agent_for_user(
         temperature=0,
     )
 
+    supabase = get_user_supabase_client(jwt_token)
+    profile_result = supabase.table("profiles").select("full_name").eq("id", user_id).execute()
+    user_name = profile_result.data[0].get("full_name") if (profile_result.data and len(profile_result.data) > 0) else "User"
+
     tools = _build_readonly_tools(jwt_token=jwt_token, allowed_event_ids=event_ids)
 
     middleware = [
@@ -278,14 +282,16 @@ def build_agent_for_user(
     ]
 
     system_prompt = (
-        "You are an event-document analysis assistant. "
-        "Answer only using data fetched via tools from events/templates for the current authenticated user. "
-        "If you cannot find data, clearly say so. "
+        f"You are an event-document analysis assistant. You are chatting with {user_name}. "
+        f"Your goal is to help the user with their events and documents. Feel free to address the user as {user_name} everytime in you response. "
+        "For event or document related queries, answer only using data fetched via tools for the current authenticated user (events/templates). "
+        "If the user asks for their own name or who you are chatting with, you can answer using the name provided in this prompt. "
+        "If you cannot find specific event data, clearly say so. "
         "If the user asks to list events or available events, call list_events. "
         "If the user asks about a specific table, document, or value but no event scope is provided, "
         "ask a clarifying question (for example, which event or document) instead of saying it is not available. "
         "Once the user provides an event, proceed to fetch data. "
-        "Always prioritize factual extraction from available markdown/table context and mention event/document names when possible."
+        "Always prioritize factual extraction from available markdown/table context and mention event/document names when possible. "
         f"Current date is {datetime.now(timezone.utc)}."
     )
 

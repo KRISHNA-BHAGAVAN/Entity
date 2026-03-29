@@ -16,6 +16,7 @@ export const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Resend Logic
@@ -49,6 +50,11 @@ export const Auth = () => {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: {
+              full_name: fullName,
+            },
+          },
         });
         if (error) throw error;
 
@@ -217,6 +223,22 @@ export const Auth = () => {
         )}
 
         <form onSubmit={handleAuth} className="space-y-5">
+          {!isLogin && (
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Full Name
+              </label>
+              <input
+                name="fullName"
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                placeholder="John Doe"
+              />
+            </div>
+          )}
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">
               Email Address

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Upload, Database, FileText, Trophy, MessageSquare } from "lucide-react";
+import { Upload, Database, FileText, Trophy, MessageSquare, Zap } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 
 export default function SideMenu() {
@@ -10,6 +10,7 @@ export default function SideMenu() {
   const EventMenuItems = [
     { icon: Upload, path: "/uploads", label: "Uploads" },
     { icon: Database, path: "/schema-discovery", label: "Schema Discovery" },
+    { icon: Zap, path: "/event-agent", label: "Event Copilot" },
   ];
 
   const DashboardMenuItems = [
