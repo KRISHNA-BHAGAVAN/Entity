@@ -411,11 +411,12 @@ def cache_check(state: SchemaDiscoveryState) -> Dict[str, Any]:
     cached = get_cache(content_hash)
     if cached:
         print(f"✅ CACHE HIT: {content_hash[:8]}")
+        cached_stats = cached.get("stats", {})
+        # Restore all stats from cache (docs_processed, total_fields, etc.)
+        stats.update(cached_stats)
+        # Override cache-hit specific values
         stats["cache_hit"] = True
         stats["processing_time"] = 0.001
-        stats["total_locations"] = cached.get("stats", {}).get(
-            "total_locations", 0
-        )
         return {
             "final_schema": cached["schema"],
             "stats": stats,

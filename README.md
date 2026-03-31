@@ -17,7 +17,7 @@ Unlike traditional mail-merge tools that require manual placeholder setup, **Ent
 - 🎯 **Intelligently extract** data from complex document structures (tables, headers, footers)
 - 💎 **Preserve formatting** perfectly while replacing content
 - 📊 **Generate consolidated reports** across multiple events and documents
-- 🔐 **Secure BYOK architecture** - your API keys, your control
+-  **Secure BYOK architecture** - your API keys, your control
 - ☁️ **Bring Your Own Drive (BYOD)** - Seamlessly connect and sync documents to your Google Drive
 
 ---
@@ -61,7 +61,14 @@ Experience your documents exactly as they appear in Microsoft Word:
 - Handle missing data with fallback mechanisms
 - Skip empty events automatically
 
-### 6. **Bring Your Own Key (BYOK)**
+### 6. **Agent Chat (Events + Documents)**
+- Conversational assistant for event/document questions
+- Token streaming responses
+- @-driven event scope selection inside the chat input
+- Lightweight processing hints (thinking/tool usage)
+- **Personalized Experience**: The agent greets and addresses you by the name provided during registration.
+
+### 7. **Bring Your Own Key (BYOK)**
 - Securely store your own API keys for:
   - OpenAI (GPT-4o, GPT-4o-mini, o3-mini)
   - Google Gemini (Gemini 1.5 Pro/Flash, Gemini 2.0 Flash)
@@ -70,7 +77,7 @@ Experience your documents exactly as they appear in Microsoft Word:
 - Model validation before storage
 - Complete audit trail
 
-### 7. **Bring Your Own Drive (BYOD)**
+### 8. **Bring Your Own Drive (BYOD)**
 - Securely connect your Google Drive account using OAuth2
 - Automatic upload of generated `.docx` and preview documents to your selected Drive folder
 - Real-time connection status and document syncing
@@ -173,6 +180,7 @@ BUCKET_NAME=your_storage_bucket_name
 
 # Master encryption key (generate once)
 MASTER_KEY=generate_using_generate_master_key.py
+```
 
 
 
@@ -257,6 +265,12 @@ App will open at: `http://localhost:5173`
 4. Click **Generate Report**
 5. Download consolidated Excel file
 
+### Step 7: Use Agent Chat (Optional)
+1. Open **Agent Chat** from the side menu
+2. Type **@** in the prompt to pick event scope (supports multi-select)
+3. Ask questions about fields, tables, and document content
+4. Receive streaming answers with lightweight processing hints
+
 ---
 
 ## 🔐 Security & Privacy
@@ -285,6 +299,7 @@ App will open at: `http://localhost:5173`
 Smart Documentation System/
 ├── backend/
 │   ├── server.py              # Main FastAPI application
+│   ├── chat_agent.py           # LangChain agent + streaming helpers
 │   ├── schemaAgent.py         # LangGraph AI workflow
 │   ├── byod_service.py        # Google Drive BYOD logic
 │   ├── byod_endpoints.py      # BYOD API routes
@@ -311,6 +326,7 @@ Smart Documentation System/
 │   │   │   ├── SchemaDiscovery.jsx
 │   │   │   ├── Reports.jsx
 │   │   │   ├── BYOKSettings.jsx
+│   │   │   ├── AgentChat.jsx
 │   │   │   └── PreviewPage.jsx
 │   │   ├── components/
 │   │   │   ├── Auth.jsx
@@ -322,6 +338,8 @@ Smart Documentation System/
 │   │   │       ├── ColumnConfig.jsx
 │   │   │       └── UnresolvedFallback.jsx
 │   │   ├── services/          # API client modules
+│   │   ├── hooks/
+│   │   │   └── useAgentStream.js # SSE chat streaming hook
 │   │   └── config/            # Supabase config
 │   └── package.json
 │
@@ -346,14 +364,18 @@ All endpoints require JWT token in `Authorization: Bearer <token>` header
 
 ### Documents
 - `GET /docs?event_id={id}` - List documents
-- `POST /upload/url` - Get signed upload URL
-- `POST /upload/confirm` - Confirm upload
-- `GET /download/{doc_id}` - Download document
+- `POST /docs/upload-url` - Get signed upload URL
+- `POST /docs/confirm` - Confirm upload
+- `GET /docs/{doc_id}` - Download document
 - `DELETE /docs/{doc_id}` - Delete document
 
 ### AI Operations
 - `POST /discover-schema` - Run schema discovery
 - `POST /extract-markdown` - Extract markdown from DOCX
+
+### Agent Chat
+- `POST /chat/stream` - Stream responses via SSE
+- `POST /chat/reset` - Reset chat thread
 
 ### Reports
 - `GET /report/columns` - Get report column config
@@ -385,7 +407,7 @@ python test_byok_enforcement.py
 ```
 
 ### Manual Testing Checklist
-- [ ] User registration and login
+- [ ] User registration (with full name) and login
 - [ ] Event creation and management
 - [ ] Document upload (check duplicates)
 - [ ] Schema discovery with different models
