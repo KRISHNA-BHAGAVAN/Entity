@@ -49,6 +49,7 @@ export const useAgentStream = ({ eventIds }) => {
       id: crypto.randomUUID(),
       role: "user",
       content,
+      eventIds: eventIds || [],
       createdAt: Date.now(),
     };
 
@@ -57,6 +58,7 @@ export const useAgentStream = ({ eventIds }) => {
       id: assistantId,
       role: "assistant",
       content: "",
+      thinking: "",
       createdAt: Date.now(),
     };
 
@@ -126,6 +128,15 @@ export const useAgentStream = ({ eventIds }) => {
 
           if (event.type === "thinking") {
             const label = (event.content || "Thinking").trim();
+            // Store thinking in message for persistence
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantId
+                  ? { ...msg, thinking: `${msg.thinking || ""}${event.content || ""}` }
+                  : msg
+              )
+            );
+            // Also track in activity for real-time UI
             setActivityByMessage((prev) => ({
               ...prev,
               [assistantId]: [

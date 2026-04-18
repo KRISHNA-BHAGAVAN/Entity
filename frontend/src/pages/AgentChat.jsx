@@ -46,7 +46,30 @@ const AgentChat = () => {
           return;
         }
 
-        setEvents(data || []);
+        const allEvents = data || [];
+        if (allEvents.length === 0) {
+          setEvents([]);
+          return;
+        }
+
+        // Fetch events that have at least one document
+        const eventIds = allEvents.map((e) => e.id);
+        const { data: templatesData, error: templatesError } = await supabase
+          .from("templates")
+          .select("event_id")
+          .in("event_id", eventIds);
+
+        if (templatesError) {
+          setEvents([]);
+          return;
+        }
+
+        // Build set of event IDs that have documents
+        const eventIdsWithDocs = new Set(templatesData?.map((t) => t.event_id) || []);
+
+        // Filter events to only those with documents
+        const eventsWithDocs = allEvents.filter((event) => eventIdsWithDocs.has(event.id));
+        setEvents(eventsWithDocs);
       } finally {
         setIsLoadingEvents(false);
       }
@@ -324,7 +347,26 @@ const AgentChat = () => {
                        </ReactMarkdown>
                      </div>
                    ) : (
-                     <div className="break-words font-medium">{message.content}</div>
+                     <div className="break-words font-medium">
+                       {/* Show selected events above user message */}
+                       {message.eventIds?.length > 0 && (
+                         <div className="flex flex-wrap gap-1 mb-2">
+                           {message.eventIds.map((eventId) => {
+                             const event = events.find((e) => e.id === eventId);
+                             if (!event) return null;
+                             return (
+                               <span
+                                 key={eventId}
+                                 className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px] font-bold uppercase tracking-wide"
+                               >
+                                 {event.name}
+                               </span>
+                             );
+                           })}
+                         </div>
+                       )}
+                       {message.content}
+                     </div>
                    )
                 ) : (message.role === "assistant" && isLoading && !error ? (
                    <div className="flex items-center gap-1.5 h-4">
@@ -334,33 +376,43 @@ const AgentChat = () => {
                    </div>
                 ) : "")}
                 
-                {message.role === "assistant" && isLoading && !error && streamingAssistantId === message.id && (activityByMessage[message.id] || []).length > 0 && (
-                  <div className="mt-3 border border-blue-100 rounded-lg bg-[#F8FAFC] overflow-hidden">
+                {/* Persistent thinking block - shows during streaming and after completion */}
+                {message.role === "assistant" && message.thinking && (
+                  <div className="mt-3 border border-slate-200 rounded-lg bg-slate-50/50 overflow-hidden">
                     <button
                       type="button"
                       onClick={() => toggleDetails(message.id)}
-                      className="w-full flex items-center justify-between px-3 py-2 text-[10px] text-blue-700 hover:bg-blue-50/50 transition-colors"
+                      className="w-full flex items-center justify-between px-3 py-2 text-[10px] text-slate-600 hover:bg-slate-100/50 transition-colors"
                     >
                       <span className="font-bold flex items-center gap-1.5 uppercase tracking-wide">
-                         <Loader2 size={10} className="animate-spin text-blue-500" />
-                         Thinking process
+                         {isLoading && streamingAssistantId === message.id ? (
+                           <Loader2 size={10} className="animate-spin text-blue-500" />
+                         ) : (
+                           <Brain size={10} className="text-slate-400" />
+                         )}
+                         Thought process ({message.thinking.length} chars)
                       </span>
                       <ChevronDown
                         size={12}
-                        className={`transition-transform duration-300 text-blue-400 ${expandedDetails[message.id] ? "rotate-180" : ""}`}
+                        className={`transition-transform duration-300 text-slate-400 ${expandedDetails[message.id] ? "rotate-180" : ""}`}
                       />
                     </button>
 
+                    {/* Show preview when collapsed */}
+                    {!expandedDetails[message.id] && message.thinking.length > 0 && (
+                      <div className="px-3 py-2 border-t border-slate-100/50 text-[10px] text-slate-500 font-medium line-clamp-2">
+                        {message.thinking.length > 120
+                          ? `${message.thinking.slice(0, 120)}...`
+                          : message.thinking}
+                      </div>
+                    )}
+
+                    {/* Show full content when expanded */}
                     {expandedDetails[message.id] && (
-                       <div className="border-t border-blue-100/50 p-2 bg-white/50 space-y-1.5">
-                        {(activityByMessage[message.id] || []).map((entry) => (
-                          <div key={entry.id} className="rounded-md border border-black/5 bg-white px-2.5 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
-                            <div className="flex items-center gap-2 text-[10px] text-slate-600 font-semibold tracking-wide">
-                              {renderActivityIcon(entry.kind)}
-                              <span>{entry.label}</span>
-                            </div>
-                          </div>
-                        ))}
+                      <div className="border-t border-slate-100/50 p-3 bg-white/50">
+                        <pre className="text-[10px] text-slate-600 font-mono leading-relaxed whitespace-pre-wrap">
+                          {message.thinking}
+                        </pre>
                       </div>
                     )}
                   </div>

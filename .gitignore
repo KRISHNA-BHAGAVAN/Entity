@@ -192,6 +192,7 @@ current_state.png
 .amazonq
 .amazonq/rules
 .agents
+.windsurf
 example-docs
 test*
 DEV_CONTEXT.md

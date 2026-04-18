@@ -1,3 +1,7 @@
+# Load environment variables FIRST (required for LangSmith tracing)
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 import json,uuid
 import re
 from datetime import datetime
@@ -25,6 +29,7 @@ from report_service import (
     generate_report_preview, resolve_event_with_docs, finalize_report_excel
 )
 from chat_agent import build_agent_for_user, stream_agent_response
+from langsmith import traceable
 
 # Set up the FastAPI app and add routes
 app = FastAPI(
@@ -607,6 +612,7 @@ def _resolve_event_ids_from_message(
 
 
 @app.post("/chat/stream")
+@traceable(run_type="chain", name="Chat Stream API")
 async def chat_stream(req: ChatStreamRequest, token: Optional[str] = Depends(get_jwt_token)):
     if not token:
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -630,7 +636,7 @@ async def chat_stream(req: ChatStreamRequest, token: Optional[str] = Depends(get
     )
 
     try:
-        agent, key_metadata = build_agent_for_user(
+        agent, key_metadata = await build_agent_for_user(
             user_id=user_id,
             jwt_token=token,
             event_ids=resolved_event_ids,
@@ -651,6 +657,15 @@ async def chat_stream(req: ChatStreamRequest, token: Optional[str] = Depends(get
         raise HTTPException(status_code=500, detail=f"Failed to initialize chat agent: {str(e)}")
 
     async def event_stream():
+        # Immediate status message to reduce perceived latency (TTFB)
+        yield _sse_data(
+            {
+                "type": "status",
+                "message": "initializing",
+                "thread_id": thread_id,
+            }
+        )
+        
         yield _sse_data(
             {
                 "type": "meta",
@@ -658,6 +673,16 @@ async def chat_stream(req: ChatStreamRequest, token: Optional[str] = Depends(get
                 "key_info": key_metadata,
             }
         )
+        
+        # Status update before starting agent streaming
+        yield _sse_data(
+            {
+                "type": "status",
+                "message": "thinking",
+                "thread_id": thread_id,
+            }
+        )
+        
         try:
             async for chunk in stream_agent_response(
                 agent=agent,
