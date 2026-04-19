@@ -1,23 +1,11 @@
-import { supabase } from "../services/supabaseClient";
+import { getAccessToken } from "../services/authSession";
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 console.log(`API_BASE_URL: ${API_BASE_URL}`);
 
 const getAuthHeaders = async () => {
-  // This forces token refresh if needed
-  const { data: userData, error: userError } =
-    await supabase.auth.getUser();
-
-  if (userError) {
-    console.error("User not authenticated:", userError.message);
-    return {};
-  }
-
-  const { data: sessionData } =
-    await supabase.auth.getSession();
-
-  const token = sessionData?.session?.access_token;
+  const token = await getAccessToken();
   if (!token) return {};
 
   return {
@@ -29,7 +17,7 @@ const getAuthHeaders = async () => {
 export const apiCall = async (endpoint, options = {}) => {
   const url = `${API_BASE_URL}${endpoint}`;
 
-  // 1. Fetch the latest session token from Supabase
+  // 1. Fetch the cached session token
   const authHeaders = await getAuthHeaders();
 
   // 2. Log headers for debugging (Check your browser console!)

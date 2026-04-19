@@ -1,31 +1,31 @@
 import { getDocs } from './storage';
 import { apiCall } from '../config/api';
 import { cacheService } from './cacheService';
-import { supabase } from './supabaseClient';
+import { getCurrentUserId } from './authSession';
 
 export const getMarkdownFromCache = async (docId) => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  return await cacheService.getMarkdown(docId, user.id);
+  const userId = await getCurrentUserId();
+  if (!userId) return null;
+  return await cacheService.getMarkdown(docId, userId);
 };
 
 export const setMarkdownInCache = async (docId, markdown) => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
-  await cacheService.setMarkdown(docId, markdown, user.id);
+  const userId = await getCurrentUserId();
+  if (!userId) return;
+  await cacheService.setMarkdown(docId, markdown, userId);
 };
 
 export const preloadEventMarkdown = async (eventId) => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const userId = await getCurrentUserId();
+    if (!userId) return;
     
     console.log(`Preloading markdown for event: ${eventId}`);
     const docs = await getDocs(eventId);
     
     const promises = docs.map(async (doc) => {
       // Skip if already cached
-      const cached = await cacheService.getMarkdown(doc.id, user.id);
+      const cached = await cacheService.getMarkdown(doc.id, userId);
       if (cached) return;
       
       try {
@@ -47,7 +47,7 @@ export const preloadEventMarkdown = async (eventId) => {
         }
         
         if (markdown) {
-          await cacheService.setMarkdown(doc.id, markdown, user.id);
+          await cacheService.setMarkdown(doc.id, markdown, userId);
           console.log(`Cached markdown for: ${doc.name} (${markdown.length} chars)`);
         }
       } catch (err) {
@@ -64,7 +64,7 @@ export const preloadEventMarkdown = async (eventId) => {
 };
 
 export const clearMarkdownCache = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
-  await cacheService.clearUserCache(user.id);
+  const userId = await getCurrentUserId();
+  if (!userId) return;
+  await cacheService.clearUserCache(userId);
 };

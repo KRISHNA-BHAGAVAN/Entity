@@ -485,12 +485,12 @@ async def _cache_agent(
     user_id: str,
     event_ids: Optional[Sequence[str]] = None,
     agent: Any = None,
-    metadata: dict = None,
+    metadata: Optional[dict] = None,
 ) -> None:
     """Cache agent for reuse."""
     cache_key = (user_id, frozenset(event_ids or []))
     async with AGENT_CACHE_LOCK:
-        AGENT_CACHE[cache_key] = (agent, metadata, time.time())
+        AGENT_CACHE[cache_key] = (agent, metadata or {}, time.time())
 
 
 def _cleanup_expired_cache() -> None:
@@ -515,12 +515,15 @@ async def build_agent_for_user(
     if cached:
         return cached
 
-    provider, model = _resolve_user_model_preferences(jwt_token=jwt_token, user_id=user_id)
+    selection = key_broker.resolve_user_selection(jwt_token=jwt_token, user_id=user_id)
+    provider = selection["provider"]
+    model = selection["model"]
     llm, key_metadata = key_broker.get_llm_for_user(
         user_id=user_id,
+        jwt_token=jwt_token,
         provider=provider,
         model=model,
-        jwt_token=jwt_token,
+        selection=selection,
         strict_byok=True,
         temperature=0,
     )

@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { API_BASE_URL } from "../config/api";
-import { supabase } from "../services/supabaseClient";
+import { getAccessToken } from "../services/authSession";
 import {
   applyToolCallEvent,
   buildRegenerationPayload,
@@ -85,8 +85,7 @@ export const useAgentStream = ({ eventIds }) => {
     setStreamingAssistantId(assistantId);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
+      const token = await getAccessToken();
 
       if (!token) {
         throw new Error("Authentication required");
@@ -227,8 +226,7 @@ export const useAgentStream = ({ eventIds }) => {
     setStreamingAssistantId(null);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
+      const token = await getAccessToken();
 
       if (!token) {
         setThreadId(null);

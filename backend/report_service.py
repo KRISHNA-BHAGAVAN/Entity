@@ -63,9 +63,9 @@ def update_report_columns(columns: List[Dict[str, Any]], jwt_token: str) -> List
 # REPORT GENERATION
 # ------------------------------------------------------------------------------
 
-def fetch_events_in_range(start_date: str, end_date: str, jwt_token: str) -> List[Dict[str, Any]]:
+def fetch_events_in_range(start_date: str, end_date: str, jwt_token: str, supabase=None) -> List[Dict[str, Any]]:
     """Fetch events within a specific date range."""
-    supabase = get_user_supabase_client(jwt_token)
+    supabase = supabase or get_user_supabase_client(jwt_token)
     
     # Ensure end_date includes the full day if it's a timestamp
     # But since we use .lte on 'date' or 'timestamp', YYYY-MM-DD works differently.
@@ -84,6 +84,23 @@ def fetch_events_in_range(start_date: str, end_date: str, jwt_token: str) -> Lis
         
     return result.data
 
+
+def _fetch_event_ids_with_docs(supabase, event_ids: List[str]) -> set[str]:
+    if not event_ids:
+        return set()
+
+    result = (
+        supabase.table('templates')
+        .select('event_id')
+        .in_('event_id', event_ids)
+        .execute()
+    )
+    return {
+        row['event_id']
+        for row in (result.data or [])
+        if row.get('event_id')
+    }
+
 def generate_report_preview(
     start_date: str,
     end_date: str, 
@@ -99,7 +116,8 @@ def generate_report_preview(
       - valid_rows: List of fully resolved rows
       - unresolved_events: List of events needing manual doc selection
     """
-    events = fetch_events_in_range(start_date, end_date, jwt_token)
+    supabase = get_user_supabase_client(jwt_token)
+    events = fetch_events_in_range(start_date, end_date, jwt_token, supabase=supabase)
     
     valid_rows = []
     unresolved_events = []
@@ -109,7 +127,8 @@ def generate_report_preview(
     SYSTEM_COLUMNS = ['S.No', 'Event Date', 'Event Name']
     llm_columns = [c for c in columns if c['name'] not in SYSTEM_COLUMNS]
     
-    supabase = get_user_supabase_client(jwt_token)
+    event_ids = [event['id'] for event in events]
+    events_with_docs = _fetch_event_ids_with_docs(supabase, event_ids)
 
     llm_instance, _ = key_broker.get_llm_for_user(
         user_id=user_id,
@@ -125,8 +144,7 @@ def generate_report_preview(
         event_name = event.get('name', 'Unknown Event')
         
         # 0. Skip if no documents
-        doc_resp = supabase.table('templates').select('id', count='exact').eq('event_id', event_id).execute()
-        if doc_resp.count == 0:
+        if event_id not in events_with_docs:
             skipped_events.append(event_name)
             continue
 
@@ -226,11 +244,22 @@ def resolve_event_with_docs(
     supabase = get_user_supabase_client(jwt_token)
     
     # 1. Fetch doc contents
-    docs_content = []
-    for doc_id in doc_ids:
-        meta = supabase.table('templates').select('*').eq('id', doc_id).single().execute()
-        if meta and meta.data.get('markdown_content'):
-             docs_content.append(meta.data['markdown_content'])
+    docs_result = (
+        supabase.table('templates')
+        .select('id, markdown_content')
+        .in_('id', doc_ids)
+        .execute()
+    )
+    docs_by_id = {
+        row['id']: row.get('markdown_content')
+        for row in (docs_result.data or [])
+        if row.get('id')
+    }
+    docs_content = [
+        docs_by_id[doc_id]
+        for doc_id in doc_ids
+        if docs_by_id.get(doc_id)
+    ]
              
     if not docs_content:
         return {col: None for col in missing_columns}
@@ -314,7 +343,7 @@ def resolve_event_with_docs(
 
         DynamicOut: type[BaseModel] = create_model(  # type: ignore[assignment]
             "DynamicDocExtraction",
-            **field_defs,
+            **field_defs,  # type: ignore[arg-type]
         )
 
         try:

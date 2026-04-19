@@ -167,6 +167,7 @@ class CredentialBroker:
         model: Optional[str] = None,
         jwt_token: Optional[str] = None,
         strict_byok: bool = True,
+        selection: Optional[dict] = None,
         **options,
     ) -> tuple[Any, dict]:
         if not jwt_token:
@@ -175,7 +176,7 @@ class CredentialBroker:
             raise BYOKSetupRequiredError("BYOK_SETUP_REQUIRED: Authentication required.")
 
         try:
-            selection = self.resolve_user_selection(
+            resolved_selection = selection or self.resolve_user_selection(
                 jwt_token=jwt_token,
                 user_id=user_id,
                 provider=provider,
@@ -186,26 +187,28 @@ class CredentialBroker:
                 raise BYOKRequiredError(f"BYOK_REQUIRED: {exc}") from exc
             raise BYOKSetupRequiredError(f"BYOK_SETUP_REQUIRED: {exc}") from exc
 
-        adapter = get_provider_adapter(selection["provider"])
-        llm = adapter.create_chat_model(selection["credentials"], selection["model"], **options)
+        assert resolved_selection is not None
+
+        adapter = get_provider_adapter(resolved_selection["provider"])
+        llm = adapter.create_chat_model(resolved_selection["credentials"], resolved_selection["model"], **options)
 
         supabase = get_user_supabase_client(jwt_token)
         supabase.table("llm_api_keys").update(
             {"last_used_at": datetime.utcnow().isoformat()}
-        ).eq("user_id", user_id).eq("provider", selection["provider"]).execute()
+        ).eq("user_id", user_id).eq("provider", resolved_selection["provider"]).execute()
         self._log_audit(
             supabase,
             user_id=user_id,
-            provider=selection["provider"],
+            provider=resolved_selection["provider"],
             action="used",
-            model=selection["model"],
+            model=resolved_selection["model"],
         )
         return llm, {
             "key_source": "user",
             "user_key_found": True,
             "fallback_used": False,
-            "provider": selection["provider"],
-            "model": selection["model"],
+            "provider": resolved_selection["provider"],
+            "model": resolved_selection["model"],
         }
 
     def _deserialize_credentials(self, record: dict) -> Dict[str, Any]:

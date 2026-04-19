@@ -1,6 +1,6 @@
 import { apiCall } from "../config/api";
 import { cacheService } from "./cacheService";
-import { supabase } from "./supabaseClient";
+import { getCurrentUserId } from "./authSession";
 
 export const generateFinalDoc = async (docId, values, docVariables, tableEdits = []) => {
   // Handle different input formats
@@ -29,11 +29,11 @@ export const generateFinalDoc = async (docId, values, docVariables, tableEdits =
 };
 
 export const getMarkdownContent = async (docId) => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('User not authenticated');
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('User not authenticated');
 
   // Try cache first
-  const cached = await cacheService.getMarkdown(docId, user.id);
+  const cached = await cacheService.getMarkdown(docId, userId);
   if (cached) return cached;
 
   // Fetch from API
@@ -44,18 +44,19 @@ export const getMarkdownContent = async (docId) => {
   });
 
   // Cache the result
-  await cacheService.setMarkdown(docId, response.markdown_content, user.id);
-  return response.markdown_content;
+  const markdown = response.markdown ?? response.markdown_content;
+  await cacheService.setMarkdown(docId, markdown, userId);
+  return markdown;
 };
 
 export const getSchemaCache = async (key) => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  return await cacheService.getSchema(key, user.id);
+  const userId = await getCurrentUserId();
+  if (!userId) return null;
+  return await cacheService.getSchema(key, userId);
 };
 
 export const setSchemaCache = async (key, schema) => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
-  await cacheService.setSchema(key, schema, user.id);
+  const userId = await getCurrentUserId();
+  if (!userId) return;
+  await cacheService.setSchema(key, schema, userId);
 };
