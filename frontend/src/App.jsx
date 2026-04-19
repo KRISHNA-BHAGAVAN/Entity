@@ -15,11 +15,11 @@ import EventAgent from "./pages/EventAgent";
 import EntityLogo from "./components/logo";
 import Reports from "./pages/Reports";
 import SideMenu from "./components/SideMenu";
+import { AppSessionSkeleton } from "./components/Skeletons";
 
 import {
   UserCircle,
   LogOut,
-  Loader2,
   ChevronDown,
   Key,
 } from "lucide-react";
@@ -134,14 +134,7 @@ const App = () => {
      Guards
   ---------------------------- */
   if (isLoadingSession) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-white">
-        <div className="flex flex-col items-center gap-4">
-          <EntityLogo size={48} className="text-blue-800 animate-pulse" />
-          <Loader2 className="animate-spin text-slate-400" size={24} />
-        </div>
-      </div>
-    );
+    return <AppSessionSkeleton />;
   }
 
   if (!session) {

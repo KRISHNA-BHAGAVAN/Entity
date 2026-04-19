@@ -5,7 +5,6 @@ import {
   Trash2,
   Calendar,
   ArrowRight,
-  Loader2,
   Pencil,
   Check,
   X,
@@ -19,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 import ConfirmModal from './ConfirmModal';
+import { DashboardSkeleton } from './Skeletons';
 
 const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
   const toast = useToast();
@@ -133,12 +133,7 @@ const EventList = ({ events, isLoading, onSelectEvent, onRefresh }) => {
   );
 
   if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[70vh] gap-4">
-        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-        <span className="text-xs font-bold text-slate-400 animate-pulse uppercase tracking-widest">Accessing Repository</span>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   return (

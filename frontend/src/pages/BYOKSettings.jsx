@@ -10,40 +10,23 @@ import {
   AlertTriangle,
   Trash2,
   RefreshCw,
-  ChevronDown,
   Plus,
-  HardDrive,
-  FolderOpen
+  HardDrive
 } from 'lucide-react';
-
-const PROVIDERS = {
-  openai: {
-    name: 'OpenAI',
-    placeholder: 'sk-...',
-    recommended: ['gpt-4o', 'gpt-4o-mini', 'o3-mini']
-  },
-  gemini: {
-    name: 'Google Gemini',
-    placeholder: 'AI...',
-    recommended: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash']
-  },
-  groq: {
-    name: 'Groq',
-    placeholder: 'gsk_...',
-    recommended: ['llama-3.3-70b-versatile', 'deepseek-r1-distill-llama-70b', 'llama-3.1-8b-instant']
-  }
-};
+import { BYOKSettingsSkeleton, SkeletonBlock } from '../components/Skeletons';
 
 const BYOKSettings = () => {
   const { success, error } = useToast();
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [providerCatalog, setProviderCatalog] = useState({});
   const [selectedProvider, setSelectedProvider] = useState('');
-  const [apiKey, setApiKey] = useState('');
+  const [credentialValues, setCredentialValues] = useState({});
   const [selectedModel, setSelectedModel] = useState('');
   const [customModel, setCustomModel] = useState('');
   const [showCustomModel, setShowCustomModel] = useState(false);
-  const [showKey, setShowKey] = useState(false);
+  const [showSecrets, setShowSecrets] = useState({});
   const [isAdding, setIsAdding] = useState(false);
   const [validatingProvider, setValidatingProvider] = useState('');
   const [revokingProvider, setRevokingProvider] = useState('');
@@ -68,6 +51,18 @@ const BYOKSettings = () => {
     }
   };
 
+  const loadCatalog = async () => {
+    try {
+      const data = await apiCall('/api/byok/catalog');
+      const providerMap = Object.fromEntries((data.providers || []).map((provider) => [provider.id, provider]));
+      setProviderCatalog(providerMap);
+    } catch (err) {
+      error('Failed to load provider catalog');
+    } finally {
+      setCatalogLoading(false);
+    }
+  };
+
   const loadDriveStatus = async () => {
     try {
       const data = await apiCall('/api/byod/status');
@@ -80,9 +75,17 @@ const BYOKSettings = () => {
   };
 
   const addOrUpdateKey = async () => {
-    if (!selectedProvider || !apiKey.trim()) return;
+    if (!selectedProvider) return;
+
+    const selectedProviderMeta = providerCatalog[selectedProvider];
+    const requiredFields = (selectedProviderMeta?.credential_fields || []).filter((field) => field.required);
+    const missingRequiredField = requiredFields.find((field) => !String(credentialValues[field.name] || '').trim());
+    if (missingRequiredField) return;
 
     const modelToUse = showCustomModel ? customModel.trim() : selectedModel;
+    const credentials = Object.fromEntries(
+      Object.entries(credentialValues).filter(([, value]) => String(value || '').trim())
+    );
 
     setIsAdding(true);
     try {
@@ -90,17 +93,18 @@ const BYOKSettings = () => {
         method: 'POST',
         body: JSON.stringify({
           provider: selectedProvider,
-          api_key: apiKey.trim(),
-          model: modelToUse || null
+          model: modelToUse || null,
+          credentials
         })
       });
 
       success(`API key ${result.action} successfully`);
-      setApiKey('');
       setSelectedProvider('');
+      setCredentialValues({});
       setSelectedModel('');
       setCustomModel('');
       setShowCustomModel(false);
+      setShowSecrets({});
       loadProviders();
     } catch (err) {
       error(err.detail || err.message);
@@ -266,6 +270,7 @@ const BYOKSettings = () => {
 
   useEffect(() => {
     loadProviders();
+    loadCatalog();
     loadDriveStatus();
   }, []);
 
@@ -274,28 +279,34 @@ const BYOKSettings = () => {
     setSelectedModel('');
     setCustomModel('');
     setShowCustomModel(false);
+    setCredentialValues({});
+    setShowSecrets({});
   }, [selectedProvider]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="animate-spin text-indigo-600" size={24} />
-        <span className="ml-2 text-slate-600">Loading API keys...</span>
-      </div>
-    );
+  if (loading || catalogLoading) {
+    return <BYOKSettingsSkeleton />;
   }
 
-  const recommendedModels = selectedProvider ? PROVIDERS[selectedProvider]?.recommended || [] : [];
+  const selectedProviderMeta = selectedProvider ? providerCatalog[selectedProvider] : null;
+  const recommendedModels = selectedProviderMeta?.recommended_models || [];
+  const credentialFields = selectedProviderMeta?.credential_fields || [];
+  const hasMissingRequiredCredential = credentialFields.some(
+    (field) => field.required && !String(credentialValues[field.name] || '').trim()
+  );
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-          <Shield className="text-indigo-600" size={24} />
+    <div className="relative mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_15%_15%,rgba(14,165,233,0.18),transparent_40%),radial-gradient(circle_at_85%_0%,rgba(34,197,94,0.1),transparent_30%)]" />
+      <div className="mb-6 rounded-3xl border border-sky-100 bg-gradient-to-r from-sky-50 via-white to-cyan-50 p-6 shadow-[0_24px_50px_-38px_rgba(3,105,161,0.65)]">
+        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
+          Credential Vault
+        </div>
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl flex items-center gap-2">
+          <Shield className="text-sky-600" size={24} />
           Bring Your Own Keys (BYOK)
         </h1>
-        <p className="text-slate-600 mt-2">
-          Securely manage your own API keys for OpenAI, Gemini, and Groq. Keys are encrypted and never stored in plaintext.
+        <p className="mt-2 text-slate-600">
+          Securely manage your own LLM provider credentials. Credentials are encrypted and never stored in plaintext.
         </p>
       </div>
 
@@ -314,13 +325,17 @@ const BYOKSettings = () => {
         </div>
       </div> */}
 
-      <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6">
-        <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-           <HardDrive className="text-indigo-600" size={20} />
+      <div className="mb-6 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm backdrop-blur-sm">
+        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-800">
+          <HardDrive className="text-sky-600" size={20} />
            Google Drive Integration (BYOD)
         </h2>
         {driveLoading ? (
-           <div className="text-sm text-slate-500 flex items-center gap-2"><Loader2 className="animate-spin" size={16} /> Checking status...</div>
+          <div className="space-y-3">
+           <SkeletonBlock className="h-4 w-40" />
+           <SkeletonBlock className="h-11 w-full" />
+           <SkeletonBlock className="h-11 w-3/4" />
+          </div>
         ) : driveStatus?.connected ? (
            <div className="space-y-4">
              <div className="bg-green-50 text-green-700 p-3 rounded-md flex items-center justify-between text-sm border border-green-200">
@@ -376,7 +391,7 @@ const BYOKSettings = () => {
                          value={manualFolderLink}
                          onChange={(e) => setManualFolderLink(e.target.value)}
                          placeholder="https://drive.google.com/drive/folders/..."
-                         className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
                        />
                        <p className="text-xs text-slate-500 mt-1">
                          Make sure the folder is owned by or shared with: <span className="font-semibold">{driveStatus.email || 'your connected account'}</span>
@@ -386,7 +401,7 @@ const BYOKSettings = () => {
                        <button
                          onClick={handleSetManualFolder}
                          disabled={isSettingManualFolder || !manualFolderLink.trim()}
-                         className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[100px]"
+                        className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[100px]"
                        >
                          {isSettingManualFolder ? <Loader2 size={16} className="animate-spin" /> : 'Save Link'}
                        </button>
@@ -408,14 +423,14 @@ const BYOKSettings = () => {
         ) : (
            <div className="space-y-4">
              <p className="text-sm text-slate-600">Connect your Google Drive account to enable document previews and cloud storage.</p>
-             <button onClick={connectDrive} className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition">
+             <button onClick={connectDrive} className="px-4 py-2 bg-sky-600 text-white rounded-lg text-sm font-semibold hover:bg-sky-700 transition-colors">
                Connect Google Drive
              </button>
            </div>
         )}
       </div>
 
-      <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6">
+      <div className="mb-6 rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm backdrop-blur-sm">
         <h2 className="text-lg font-semibold text-slate-800 mb-4">Add / Test API Key</h2>
 
         <div className="space-y-4">
@@ -427,98 +442,121 @@ const BYOKSettings = () => {
               <select
                 value={selectedProvider}
                 onChange={(e) => setSelectedProvider(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
               >
                 <option value="">Select provider...</option>
-                {Object.entries(PROVIDERS).map(([key, provider]) => (
+                {Object.entries(providerCatalog).map(([key, provider]) => (
                   <option key={key} value={key}>{provider.name}</option>
                 ))}
               </select>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                API Key
-              </label>
-              <div className="relative">
-                <input
-                  type={showKey ? 'text' : 'password'}
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={selectedProvider ? PROVIDERS[selectedProvider]?.placeholder : 'Enter API key...'}
-                  className="w-full px-3 py-2 pr-10 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowKey(!showKey)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
           </div>
 
           {selectedProvider && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Model (Optional)
-              </label>
-              {!showCustomModel ? (
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-2">
-                    {recommendedModels.map((model) => (
-                      <button
-                        key={model}
-                        onClick={() => setSelectedModel(selectedModel === model ? '' : model)}
-                        className={`px-3 py-1.5 text-sm font-medium rounded-md border transition-all ${selectedModel === model
-                            ? 'bg-indigo-600 text-white border-indigo-600'
-                            : 'bg-white text-slate-700 border-slate-300 hover:border-indigo-400'
-                          }`}
-                      >
-                        {model}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => setShowCustomModel(true)}
-                      className="px-3 py-1.5 text-sm font-medium rounded-md border border-dashed border-slate-300 text-slate-500 hover:border-indigo-400 hover:text-indigo-600 flex items-center gap-1"
-                    >
-                      <Plus size={14} />
-                      Custom
-                    </button>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    Recommended models for {PROVIDERS[selectedProvider].name}
-                  </p>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={customModel}
-                    onChange={(e) => setCustomModel(e.target.value)}
-                    placeholder="Enter custom model name..."
-                    className="flex-1 px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <button
-                    onClick={() => {
-                      setShowCustomModel(false);
-                      setCustomModel('');
-                    }}
-                    className="px-3 py-2 text-sm text-slate-600 border border-slate-300 rounded-md hover:bg-slate-50"
-                  >
-                    Cancel
-                  </button>
+            <>
+              {credentialFields.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {credentialFields.map((field) => {
+                    const isSecret = field.secret;
+                    const showSecret = !!showSecrets[field.name];
+                    return (
+                      <div key={field.name}>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          {field.label}
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={isSecret && !showSecret ? 'password' : (field.input_type || 'text')}
+                            value={credentialValues[field.name] || ''}
+                            onChange={(e) => setCredentialValues((current) => ({
+                              ...current,
+                              [field.name]: e.target.value
+                            }))}
+                            placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}...`}
+                            className={`w-full px-3 py-2 ${isSecret ? 'pr-10' : ''} border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500`}
+                          />
+                          {isSecret && (
+                            <button
+                              type="button"
+                              onClick={() => setShowSecrets((current) => ({
+                                ...current,
+                                [field.name]: !current[field.name]
+                              }))}
+                              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            >
+                              {showSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                          )}
+                        </div>
+                        {field.help_text && (
+                          <p className="text-xs text-slate-500 mt-1">{field.help_text}</p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
-            </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Model (Optional)
+                </label>
+                {!showCustomModel ? (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-2">
+                      {recommendedModels.map((model) => (
+                        <button
+                          key={model.id}
+                          onClick={() => setSelectedModel(selectedModel === model.id ? '' : model.id)}
+                          className={`px-3 py-1.5 text-sm font-medium rounded-md border transition-all ${selectedModel === model.id
+                              ? 'bg-sky-600 text-white border-sky-600'
+                              : 'bg-white text-slate-700 border-slate-300 hover:border-sky-400'
+                            }`}
+                        >
+                          {model.label || model.id}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setShowCustomModel(true)}
+                        className="px-3 py-1.5 text-sm font-medium rounded-lg border border-dashed border-slate-300 text-slate-500 hover:border-sky-400 hover:text-sky-600 flex items-center gap-1"
+                      >
+                        <Plus size={14} />
+                        Custom
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Recommended models for {selectedProviderMeta?.name}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={customModel}
+                      onChange={(e) => setCustomModel(e.target.value)}
+                      placeholder="Enter custom model name..."
+                      className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+                    <button
+                      onClick={() => {
+                        setShowCustomModel(false);
+                        setCustomModel('');
+                      }}
+                      className="px-3 py-2 text-sm text-slate-600 border border-slate-300 rounded-md hover:bg-slate-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
           )}
 
           <div className="flex gap-2">
             <button
               onClick={addOrUpdateKey}
-              disabled={!selectedProvider || !apiKey.trim() || isAdding}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              disabled={!selectedProvider || hasMissingRequiredCredential || isAdding}
+              className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isAdding ? (
                 <>
@@ -536,7 +574,7 @@ const BYOKSettings = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-lg border border-slate-200">
+      <div className="rounded-2xl border border-slate-200 bg-white/90 shadow-sm backdrop-blur-sm">
         <div className="px-6 py-4 border-b border-slate-200">
           <h2 className="text-lg font-semibold text-slate-800">Your API Keys</h2>
         </div>
@@ -553,8 +591,8 @@ const BYOKSettings = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div>
-                      <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                        {PROVIDERS[provider.provider]?.name || provider.provider}
+                        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                        {providerCatalog[provider.provider]?.name || provider.provider}
                         {provider.model && (
                           <span className="text-xs font-normal text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
                             {provider.model}
@@ -606,7 +644,7 @@ const BYOKSettings = () => {
         )}
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-6">
+      <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
         <div className="flex items-start gap-3">
           <AlertTriangle className="text-amber-600 mt-0.5" size={20} />
           <div>
@@ -614,8 +652,8 @@ const BYOKSettings = () => {
             <ul className="text-sm text-amber-700 mt-1 space-y-1">
               <li>• When you click "Test & Add Key", your key and model are validated with a real API call</li>
               <li>• Revoking a key will immediately disable it for all operations</li>
-              <li>• Make sure to enter the exact model name provided in the llm_provider documentation</li>
-              <li>• Custom models are validated to ensure they're supported by the provider</li>
+              <li>• Provider-specific credential fields come from the backend catalog</li>
+              <li>• Custom models are validated against the selected provider at runtime</li>
             </ul>
           </div>
         </div>

@@ -1,6 +1,7 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 @theme {
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
 }
 
 html, body {
@@ -17,6 +18,18 @@ html, body {
 }
 .animate-fadeIn {
   animation: fadeIn 0.25s ease-out;
+}
+
+@keyframes sds-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fadeIn {
+    animation: none;
+  }
 }
 
 .gdoc-scrollbar {

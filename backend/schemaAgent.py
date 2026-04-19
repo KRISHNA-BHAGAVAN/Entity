@@ -140,12 +140,17 @@ def find_reference_locations_in_docx(
 # ------------------------------------------------------------------------------
 
 
-_ENCODING = tiktoken.get_encoding("cl100k_base")
+try:
+    _ENCODING = tiktoken.get_encoding("cl100k_base")
+except Exception:
+    _ENCODING = None
 
 
 def get_token_count(text: str) -> int:
     try:
-        return len(_ENCODING.encode(text))
+        if _ENCODING is not None:
+            return len(_ENCODING.encode(text))
+        return len(text) // 4 + 1
     except Exception:
         return len(text) // 4 + 1
 

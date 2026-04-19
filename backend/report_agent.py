@@ -4,7 +4,6 @@ import logging
 from typing import Dict, Any, List, TypedDict, Optional, Literal
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import StateGraph, START, END
-from byok_providers import get_provider_adapter
 from pydantic import BaseModel, Field, create_model
 
 # Configure logging
@@ -91,8 +90,7 @@ class ReportState(TypedDict):
     distilled_context: Optional[str]
     inferred_data: Optional[Dict[str, Any]]
     unresolved_columns: List[str]
-    llm_provider: str
-    api_key: str
+    llm_instance: Any
 
 # ------------------------------------------------------------------------------
 # NODES
@@ -106,16 +104,11 @@ def distill_context_node(state: ReportState) -> Dict[str, Any]:
 
 def inference_node(state: ReportState) -> Dict[str, Any]:
     """Node to run LLM inference for column values."""
-    provider_name = state.get("llm_provider", "openai")
-    api_key = state.get("api_key")
-    
-    if not api_key:
-        raise ValueError("API Key is required for report generation.")
+    llm = state.get("llm_instance")
+    if llm is None:
+        raise ValueError("LLM instance is required for report generation.")
 
     try:
-        adapter = get_provider_adapter(provider_name)
-        llm = adapter.create_llm(api_key=api_key, temperature=0) # Low temp for deterministic extraction
-        
         columns = state["columns"]
         context = state["distilled_context"]
         
@@ -195,8 +188,8 @@ def inference_node(state: ReportState) -> Dict[str, Any]:
         logger.error(f"Error in inference_node: {e}")
         # In case of error, mark all as unresolved
         return {
-            "inferred_data": {c: None for c in state["columns"]},
-            "unresolved_columns": state["columns"]
+            "inferred_data": {c["name"]: None for c in state["columns"]},
+            "unresolved_columns": [c["name"] for c in state["columns"]],
         }
 
 # ------------------------------------------------------------------------------

@@ -1,6 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import { API_BASE_URL } from "../config/api";
 import { supabase } from "../services/supabaseClient";
+import {
+  applyToolCallEvent,
+  buildRegenerationPayload,
+} from "../utils/agentStreamState";
 
 const parseSSEBuffer = (buffer) => {
   const events = [];
@@ -25,45 +29,59 @@ const parseSSEBuffer = (buffer) => {
   return { events, remainder };
 };
 
+const createUserMessage = (content, messageEventIds) => ({
+  id: crypto.randomUUID(),
+  role: "user",
+  content,
+  eventIds: messageEventIds || [],
+  createdAt: Date.now(),
+});
+
+const createAssistantMessage = (assistantId) => ({
+  id: assistantId,
+  role: "assistant",
+  content: "",
+  toolCalls: [],
+  thinking: "",
+  createdAt: Date.now(),
+});
+
 export const useAgentStream = ({ eventIds }) => {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [threadId, setThreadId] = useState(null);
   const [error, setError] = useState(null);
   const [activeTool, setActiveTool] = useState(null);
-  const [activityByMessage, setActivityByMessage] = useState({});
   const [streamingAssistantId, setStreamingAssistantId] = useState(null);
 
   const abortRef = useRef(null);
 
   const canSend = useMemo(() => !isLoading, [isLoading]);
 
-  const sendMessage = async (text) => {
-    const content = (text || "").trim();
-    if (!content || isLoading) return;
+  const runStream = async ({
+    content,
+    messageEventIds,
+    history = null,
+    cutoffIndex = null,
+  }) => {
+    const trimmedContent = (content || "").trim();
+    if (!trimmedContent || isLoading) {
+      return;
+    }
 
     setError(null);
     setIsLoading(true);
 
-    const userMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content,
-      eventIds: eventIds || [],
-      createdAt: Date.now(),
-    };
-
     const assistantId = crypto.randomUUID();
-    const assistantMessage = {
-      id: assistantId,
-      role: "assistant",
-      content: "",
-      thinking: "",
-      createdAt: Date.now(),
-    };
+    const assistantMessage = createAssistantMessage(assistantId);
 
-    setMessages((prev) => [...prev, userMessage, assistantMessage]);
-    setActivityByMessage((prev) => ({ ...prev, [assistantId]: [] }));
+    setMessages((prev) => {
+      if (typeof cutoffIndex === "number") {
+        return [...prev.slice(0, cutoffIndex + 1), assistantMessage];
+      }
+
+      return [...prev, createUserMessage(trimmedContent, messageEventIds), assistantMessage];
+    });
     setStreamingAssistantId(assistantId);
 
     try {
@@ -84,9 +102,10 @@ export const useAgentStream = ({ eventIds }) => {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          message: content,
-          event_ids: eventIds,
-          thread_id: threadId,
+          message: trimmedContent,
+          event_ids: messageEventIds,
+          thread_id: history ? null : threadId,
+          history,
         }),
         signal: controller.signal,
       });
@@ -99,7 +118,6 @@ export const useAgentStream = ({ eventIds }) => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let buffer = "";
-      let sawToolStart = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -117,82 +135,40 @@ export const useAgentStream = ({ eventIds }) => {
 
           if (event.type === "token") {
             setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === assistantId
-                  ? { ...msg, content: `${msg.content}${event.content || ""}` }
-                  : msg
+              prev.map((message) =>
+                message.id === assistantId
+                  ? { ...message, content: `${message.content}${event.content || ""}` }
+                  : message
               )
             );
             return;
           }
 
           if (event.type === "thinking") {
-            const label = (event.content || "Thinking").trim();
-            // Store thinking in message for persistence
             setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === assistantId
-                  ? { ...msg, thinking: `${msg.thinking || ""}${event.content || ""}` }
-                  : msg
+              prev.map((message) =>
+                message.id === assistantId
+                  ? { ...message, thinking: `${message.thinking || ""}${event.content || ""}` }
+                  : message
               )
             );
-            // Also track in activity for real-time UI
-            setActivityByMessage((prev) => ({
-              ...prev,
-              [assistantId]: [
-                ...(prev[assistantId] || []),
-                {
-                  id: crypto.randomUUID(),
-                  kind: "thinking",
-                  label,
-                  ts: Date.now(),
-                },
-              ],
-            }));
             return;
           }
 
-          if (event.type === "thinking_done") {
-            return;
-          }
-
-          if (event.type === "tool_start") {
-            if (!sawToolStart) {
-              sawToolStart = true;
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantId
-                    ? { ...msg, content: "" }
-                    : msg
-                )
-              );
-            }
-            setActiveTool(event.content || "tool");
-            setActivityByMessage((prev) => ({
-              ...prev,
-              [assistantId]: [
-                ...(prev[assistantId] || []),
-                {
-                  id: crypto.randomUUID(),
-                  kind: "tool_start",
-                  label: `Calling ${event.content || "tool"}`,
-                  ts: Date.now(),
-                },
-              ],
-            }));
-            return;
-          }
-
-          if (event.type === "tool_end") {
-            setActiveTool(null);
-            setActivityByMessage((prev) => ({
-              ...prev,
-              [assistantId]: [
-                ...(prev[assistantId] || []).filter((entry) =>
-                  !(entry.kind === "tool_start" && entry.label === `Calling ${event.content || "tool"}`)
-                ),
-              ],
-            }));
+          if (event.type === "tool_start" || event.type === "tool_end" || event.type === "tool_error") {
+            setActiveTool(
+              event.type === "tool_end" ? null : event.tool_call?.name || event.content || "tool"
+            );
+            setMessages((prev) =>
+              prev.map((message) =>
+                message.id === assistantId
+                  ? {
+                      ...message,
+                      toolCalls: applyToolCallEvent(message.toolCalls || [], event),
+                    }
+                  : message
+              )
+            );
             return;
           }
 
@@ -213,6 +189,27 @@ export const useAgentStream = ({ eventIds }) => {
     }
   };
 
+  const sendMessage = async (text) => {
+    await runStream({
+      content: text,
+      messageEventIds: eventIds || [],
+    });
+  };
+
+  const regenerateMessage = async (assistantMessageId) => {
+    const payload = buildRegenerationPayload(messages, assistantMessageId);
+    if (!payload || !payload.message) {
+      return;
+    }
+
+    await runStream({
+      content: payload.message,
+      messageEventIds: payload.eventIds,
+      history: payload.history,
+      cutoffIndex: payload.cutoffIndex,
+    });
+  };
+
   const stopStreaming = () => {
     if (abortRef.current) {
       abortRef.current.abort();
@@ -220,13 +217,13 @@ export const useAgentStream = ({ eventIds }) => {
     }
     setIsLoading(false);
     setStreamingAssistantId(null);
+    setActiveTool(null);
   };
 
   const resetConversation = async () => {
     setMessages([]);
     setError(null);
     setActiveTool(null);
-    setActivityByMessage({});
     setStreamingAssistantId(null);
 
     try {
@@ -259,10 +256,10 @@ export const useAgentStream = ({ eventIds }) => {
     isLoading,
     error,
     activeTool,
-    activityByMessage,
     streamingAssistantId,
     canSend,
     sendMessage,
+    regenerateMessage,
     stopStreaming,
     resetConversation,
   };

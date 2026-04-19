@@ -5,6 +5,7 @@ import { apiCall } from '../../config/api';
 import { useToast } from '../../contexts/ToastContext';
 import { FileDown, AlertTriangle, CheckCircle, Loader2, Calendar } from 'lucide-react';
 import UnresolvedFallback from './UnresolvedFallback';
+import { ReportColumnConfigSkeleton } from '../Skeletons';
 
 
 const ColumnConfig = () => {
@@ -333,17 +334,13 @@ const ColumnConfig = () => {
                 </div>
             )}
 
-            <div className="flex overflow-y-hidden">
+            {loading ? (
+                <ReportColumnConfigSkeleton />
+            ) : (
+                <div className="flex overflow-y-hidden">
 
 
-                <div className="min-w-[600px] shrink-0 overflow-y-auto pr-1 space-y-3 mb-4 max-h-[480px] custom-scrollbar">
-
-                    {loading ? (
-                        <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                            <Loader2 className="animate-spin mb-2 text-indigo-600" size={32} />
-                            <p className="text-sm font-medium">Loading columns...</p>
-                        </div>
-                    ) : (
+                    <div className="min-w-[600px] shrink-0 overflow-y-auto pr-1 space-y-3 mb-4 max-h-[480px] custom-scrollbar">
                         <>
                             {columns.map((col, index) => (
                                 <div
@@ -426,10 +423,9 @@ const ColumnConfig = () => {
                                 </div>
                             )}
                         </>
-                    )}
-                </div>
+                    </div>
 
-                <div className="pl-4 border-l border-slate-100 flex flex-col justify-end w-full">
+                    <div className="pl-4 border-l border-slate-100 flex flex-col justify-end w-full">
                     {/* System Columns Buttons */}
                     <div className="mb-4 flex flex-wrap gap-2">
                         {SYSTEM_COLUMNS.map(sysCol => (
@@ -481,8 +477,9 @@ const ColumnConfig = () => {
                             </button>
                         </div>
                     </div>
+                    </div>
                 </div>
-            </div>
+            )}
 
             <UnresolvedFallback
                 isOpen={showUnresolvedModal}

@@ -3,13 +3,12 @@ import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import traceback
-from supabase import Client
 from pydantic import BaseModel, Field, create_model
 
 from storage_service import get_user_supabase_client, BUCKET_NAME
 from report_agent import report_agent
 from excel_generator import generate_report_excel
-from byok_encryption import byok_crypto
+from byok_service import key_broker
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +89,9 @@ def generate_report_preview(
     end_date: str, 
     columns: List[Dict[str, Any]], 
     jwt_token: str,
-    llm_api_key: str,
-    llm_provider: str = 'openai'
+    user_id: str,
+    llm_provider: Optional[str] = None,
+    llm_model: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Generates report data.
@@ -110,6 +110,15 @@ def generate_report_preview(
     llm_columns = [c for c in columns if c['name'] not in SYSTEM_COLUMNS]
     
     supabase = get_user_supabase_client(jwt_token)
+
+    llm_instance, _ = key_broker.get_llm_for_user(
+        user_id=user_id,
+        provider=llm_provider,
+        model=llm_model,
+        jwt_token=jwt_token,
+        strict_byok=True,
+        temperature=0,
+    )
 
     for idx, event in enumerate(events):
         event_id = event['id']
@@ -130,8 +139,7 @@ def generate_report_preview(
         inputs = {
             "columns": llm_columns,
             "event_schema": schema,
-            "llm_provider": llm_provider,
-            "api_key": llm_api_key
+            "llm_instance": llm_instance,
         }
         
         try:
@@ -227,7 +235,7 @@ def resolve_event_with_docs(
     if not docs_content:
         return {col: None for col in missing_columns}
 
-    # 2. Get user's API key
+    # 2. Resolve user's active provider configuration through the broker.
     user_resp = supabase.auth.get_user()
     if not user_resp.user:
         return {col: None for col in missing_columns}
@@ -245,39 +253,23 @@ def resolve_event_with_docs(
     except Exception as e:
         logger.warning(f"Could not load report column descriptions for structured extraction: {e}")
     
-    # Fetch the user's active API key (BYOK) from the real table.
-    # NOTE: Older code referenced a non-existent `byok_keys` table; the project uses `llm_api_keys`.
-    key_resp = (
-        supabase.table('llm_api_keys')
-        .select('encrypted_key, provider, model')
-        .eq('user_id', user_id)
-        .eq('status', 'active')
-        .limit(1)
-        .execute()
-    )
-    if not key_resp.data:
+    try:
+        selection = key_broker.resolve_user_selection(jwt_token=jwt_token, user_id=user_id)
+        llm = key_broker.get_llm_for_user(
+            user_id=user_id,
+            provider=selection["provider"],
+            model=selection["model"],
+            jwt_token=jwt_token,
+            strict_byok=True,
+            temperature=0,
+        )[0]
+    except Exception:
         return {col: None for col in missing_columns}
 
-    key_data = key_resp.data[0]
-    encrypted_key = key_data['encrypted_key']
-    provider = key_data['provider']
-    model = key_data.get('model')  # optional per schema
-
-    # Decrypt API key
-    api_key = byok_crypto.decrypt_api_key(encrypted_key)
-    
-    # 3. Use LLM to extract missing columns from documents
-    from byok_providers import get_provider_adapter
+    # 3. Use LLM to extract missing columns from documents.
     from langchain_core.messages import SystemMessage, HumanMessage
     
     try:
-        adapter = get_provider_adapter(provider)
-        # Use user's stored model when present; otherwise adapter defaults are used.
-        if model:
-            llm = adapter.create_llm(api_key=api_key, model=model, temperature=0)
-        else:
-            llm = adapter.create_llm(api_key=api_key, temperature=0)
-        
         combined_content = "\n\n---\n\n".join(docs_content)
 
         # Prefer model-enforced structured output so keys match the configured column names.

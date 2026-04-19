@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Loader2, Send, RotateCcw, ChevronDown, Brain, Wrench, Zap } from "lucide-react";
+import { Loader2, Send, RotateCcw, Zap } from "lucide-react";
 import { supabase } from "../services/supabaseClient";
 import { useAgentStream } from "../hooks/useAgentStream";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import AssistantResponse from "../components/agent/AssistantResponse";
 
 const EventAgent = () => {
   const [searchParams] = useSearchParams();
@@ -12,7 +11,6 @@ const EventAgent = () => {
 
   const [eventName, setEventName] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [expandedDetails, setExpandedDetails] = useState({});
 
   // Lock the agent to this single event
   const eventIds = eventId ? [eventId] : [];
@@ -21,11 +19,10 @@ const EventAgent = () => {
     messages,
     isLoading,
     error,
-    activeTool,
-    activityByMessage,
     streamingAssistantId,
     canSend,
     sendMessage,
+    regenerateMessage,
     stopStreaming,
     resetConversation,
   } = useAgentStream({ eventIds });
@@ -51,10 +48,6 @@ const EventAgent = () => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
-  const toggleDetails = (messageId) => {
-    setExpandedDetails((prev) => ({ ...prev, [messageId]: !prev[messageId] }));
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     const text = prompt.trim();
@@ -79,11 +72,6 @@ const EventAgent = () => {
       e.preventDefault();
       if (prompt.trim() && canSend) handleSubmit(e);
     }
-  };
-
-  const renderActivityIcon = (kind) => {
-    if (kind?.startsWith("tool")) return <Wrench size={12} strokeWidth={2.5} className="text-slate-400" />;
-    return <Brain size={12} strokeWidth={2.5} className="text-blue-500" />;
   };
 
   if (!eventId) {
@@ -160,105 +148,18 @@ const EventAgent = () => {
                     : "w-full py-2"
                 } text-sm leading-relaxed relative`}
               >
-                {message.content ? (
-                   message.role === "assistant" ? (
-                     <div className="prose-sm max-w-none break-words">
-                       <ReactMarkdown
-                         remarkPlugins={[remarkGfm]}
-                         components={{
-                           table: ({node, ...props}) => <div className="my-4 overflow-x-auto rounded-lg border border-slate-200 bg-white"><table className="w-full text-left border-collapse text-xs" {...props} /></div>,
-                           thead: ({node, ...props}) => <thead className="bg-[#f8fafc] border-b border-slate-200 text-slate-600 uppercase tracking-widest text-[9px] font-bold" {...props} />,
-                           th: ({node, ...props}) => <th className="px-3 py-2 border-r border-slate-100 last:border-r-0 font-bold" {...props} />,
-                           td: ({node, ...props}) => <td className="px-3 py-2.5 border-b border-r border-slate-100 last:border-r-0 text-slate-700" {...props} />,
-                           tr: ({node, ...props}) => <tr className="last:border-b-0 hover:bg-slate-50/50 transition-colors" {...props} />,
-                           code: ({node, inline, className, children, ...props}) => {
-                             const match = /language-(\w+)/.exec(className || '')
-                             return !inline ? (
-                               <div className="my-3 rounded-lg overflow-hidden border border-slate-200/60 bg-[#1e293b] shadow-sm">
-                                 {match && (
-                                   <div className="flex items-center justify-between px-3 py-1.5 bg-[#0f172a] border-b border-white/10">
-                                     <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider hover:text-slate-300">{match[1]}</span>
-                                   </div>
-                                 )}
-                                 <div className="overflow-x-auto p-3 gdoc-scrollbar custom-scrollbar">
-                                   <code className="text-[11px] font-mono leading-relaxed text-slate-50" {...props}>{children}</code>
-                                 </div>
-                               </div>
-                             ) : (
-                               <code className="px-1.5 py-0.5 mx-0.5 rounded bg-slate-100 border border-slate-200/70 text-rose-600 text-[11px] font-mono align-baseline" {...props}>
-                                 {children}
-                               </code>
-                             )
-                           },
-                           p: ({node, ...props}) => <p className="mb-3 last:mb-0 text-slate-700 font-medium" {...props} />,
-                           h1: ({node, ...props}) => <h1 className="text-lg font-bold text-slate-900 mt-5 mb-3 font-['Bricolage_Grotesque',sans-serif]" {...props} />,
-                           h2: ({node, ...props}) => <h2 className="text-base font-bold text-slate-800 mt-4 mb-2 font-['Bricolage_Grotesque',sans-serif]" {...props} />,
-                           h3: ({node, ...props}) => <h3 className="text-sm font-bold text-slate-800 mt-4 mb-2 font-['Bricolage_Grotesque',sans-serif]" {...props} />,
-                           ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-3 space-y-1.5 text-slate-700" {...props} />,
-                           ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-3 space-y-1.5 text-slate-700" {...props} />,
-                           li: ({node, ...props}) => <li className="pl-1 marker:text-slate-400" {...props} />,
-                           a: ({node, ...props}) => <a className="text-blue-600 font-bold hover:text-blue-800 underline decoration-blue-200 underline-offset-4 transition-colors" target="_blank" rel="noopener noreferrer" {...props} />,
-                           blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-slate-200 pl-4 py-1 mb-3 text-slate-500 italic bg-slate-50/50 rounded-r-lg" {...props} />,
-                           hr: ({node, ...props}) => <hr className="my-4 border-slate-100" {...props} />
-                         }}
-                       >
-                         {message.content}
-                       </ReactMarkdown>
-                     </div>
-                   ) : (
-                     <div className="break-words font-medium">{message.content}</div>
-                   )
-                ) : (message.role === "assistant" && isLoading && !error ? (
-                   <div className="flex items-center gap-1.5 h-4">
-                      <div className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                      <div className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                      <div className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                   </div>
-                ) : "")}
-                
-                {message.role === "assistant" && isLoading && !error && streamingAssistantId === message.id && (activityByMessage[message.id] || []).length > 0 && (
-                  <div className="mt-3 border border-amber-100 rounded-lg bg-amber-50/30 overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => toggleDetails(message.id)}
-                      className="w-full flex items-center justify-between px-3 py-2 text-[10px] text-amber-700 hover:bg-amber-50/50 transition-colors"
-                    >
-                      <span className="font-bold flex items-center gap-1.5 uppercase tracking-wide">
-                         <Loader2 size={10} className="animate-spin text-amber-500" />
-                         Thinking process
-                      </span>
-                      <ChevronDown
-                        size={12}
-                        className={`transition-transform duration-300 text-amber-400 ${expandedDetails[message.id] ? "rotate-180" : ""}`}
-                      />
-                    </button>
-
-                    {expandedDetails[message.id] && (
-                       <div className="border-t border-amber-100/50 p-2 bg-white/50 space-y-1.5">
-                        {(activityByMessage[message.id] || []).map((entry) => (
-                          <div key={entry.id} className="rounded-md border border-black/5 bg-white px-2.5 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
-                            <div className="flex items-center gap-2 text-[10px] text-slate-600 font-semibold tracking-wide">
-                              {renderActivityIcon(entry.kind)}
-                              <span>{entry.label}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                {message.role === "assistant" ? (
+                  <AssistantResponse
+                    message={message}
+                    isStreaming={isLoading && !error && streamingAssistantId === message.id}
+                    onRegenerate={regenerateMessage}
+                  />
+                ) : (
+                  <div className="break-words font-medium">{message.content}</div>
                 )}
               </div>
             </div>
           )})}
-
-          {isLoading && !error && activeTool && (
-            <div className="flex justify-center -mb-2 animate-fadeIn">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-black/5 rounded-full shadow-sm text-[9px] font-bold text-slate-500 uppercase tracking-widest">
-                <Loader2 size={10} className="animate-spin text-amber-500" />
-                Wait, tool in use: <span className="text-slate-800">{activeTool}</span>
-              </div>
-            </div>
-          )}
 
           {error && (
             <div className="w-full text-center py-2 animate-fadeIn">

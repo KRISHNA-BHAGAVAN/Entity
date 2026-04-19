@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Loader2 } from "lucide-react";
 import { debounce } from "../utils/performanceOptimizer";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import ErrorBoundary from "./ErrorBoundary";
+import { MarkdownSkeleton } from "./Skeletons";
 
 const MarkdownPreview = ({ content, isLoading, onTextSelect, highlightLocations = [] }) => {
   const [renderedContent, setRenderedContent] = useState("");
@@ -74,12 +74,7 @@ const MarkdownPreview = ({ content, isLoading, onTextSelect, highlightLocations 
   };
 
   if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen text-slate-400 gap-3 min-h-[200px]">
-        <Loader2 className="animate-spin text-blue-600" size={32} />
-        <p className="text-xs font-medium">Loading document...</p>
-      </div>
-    );
+    return <MarkdownSkeleton />;
   }
 
   return (

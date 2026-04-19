@@ -10,6 +10,8 @@ uvicorn
 langchain-openai
 langchain-google-genai
 langchain-groq
+langchain-anthropic
+langchain-ollama
 markitdown
 python-multipart
 python-docx
@@ -23,3 +25,5 @@ openpyxl
 google-api-python-client
 google-auth-httplib2
 google-auth-oauthlib
+pytest
+httpx

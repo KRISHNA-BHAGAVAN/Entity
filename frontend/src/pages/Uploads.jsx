@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 import ConfirmModal from '../components/ConfirmModal';
+import { UploadsSkeleton } from '../components/Skeletons';
 
 const Uploads = () => {
   const toast = useToast();
@@ -207,12 +208,7 @@ const Uploads = () => {
   const uploadingDocs = docs.filter((d) => d.status === 'uploading').length;
 
   if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[70vh] gap-4">
-        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Syncing Repository</span>
-      </div>
-    );
+    return <UploadsSkeleton />;
   }
 
   return (

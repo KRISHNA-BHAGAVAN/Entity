@@ -36,22 +36,27 @@ AGENT_CACHE: Dict[tuple[str, frozenset], tuple[Any, dict, float]] = {}
 AGENT_CACHE_TTL_SECONDS = 300
 AGENT_CACHE_LOCK = asyncio.Lock()
 
-DEFAULT_MODEL_BY_PROVIDER: Dict[str, str] = {
-    "openai": "gpt-4.1-mini",
-    "gemini": "gemini-2.0-flash",
-    "groq": "llama-3.3-70b-versatile",
-}
-
 # Model context windows (in tokens) for token-aware chunking
 MODEL_CONTEXT_WINDOWS: Dict[str, int] = {
+    "gpt-5.4": 400000,
+    "gpt-5.4-mini": 400000,
+    "gpt-5.4-nano": 400000,
+    "gpt-5.2": 400000,
     "gpt-4.1-mini": 200000,
     "gpt-4.1": 200000,
     "gpt-4o": 128000,
     "gpt-4o-mini": 128000,
-    "gemini-2.0-flash": 1000000,
     "gemini-2.5-pro": 1000000,
+    "gemini-2.5-flash": 1000000,
+    "gemini-2.5-flash-lite": 1000000,
     "llama-3.3-70b-versatile": 128000,
     "llama-3.1-8b-instant": 128000,
+    "claude-opus-4-1-20250805": 200000,
+    "claude-sonnet-4-20250514": 200000,
+    "claude-3-5-haiku-20241022": 200000,
+    "llama3.1": 128000,
+    "qwen3": 128000,
+    "mistral-small3.1": 128000,
 }
 
 # Default chunk sizes (in tokens) - conservative to leave room for conversation
@@ -294,24 +299,8 @@ def _safe_json(data: Any) -> str:
 
 
 def _resolve_user_model_preferences(jwt_token: str, user_id: str) -> tuple[str, str]:
-    supabase = get_user_supabase_client(jwt_token)
-    result = (
-        supabase.table("llm_api_keys")
-        .select("provider, model, last_used_at, created_at")
-        .eq("user_id", user_id)
-        .eq("status", "active")
-        .order("last_used_at", desc=True)
-        .order("created_at", desc=True)
-        .limit(1)
-        .execute()
-    )
-
-    if not result.data:
-        raise ValueError("BYOK_REQUIRED: No active API key found. Please configure BYOK first.")
-
-    provider = result.data[0].get("provider")
-    model = result.data[0].get("model") or DEFAULT_MODEL_BY_PROVIDER.get(provider, "gpt-4.1-mini")
-    return provider, model
+    selection = key_broker.resolve_user_selection(jwt_token=jwt_token, user_id=user_id)
+    return selection["provider"], selection["model"]
 
 
 def _build_readonly_tools(jwt_token: str, allowed_event_ids: Optional[Sequence[str]]) -> list:
@@ -456,6 +445,20 @@ def _extract_reasoning_text(chunk: Any) -> str:
     if len(text) > 220:
         text = f"{text[:220]}..."
     return text
+
+
+def _serialize_tool_payload(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _serialize_tool_payload(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_serialize_tool_payload(item) for item in value]
+    if isinstance(value, tuple):
+        return [_serialize_tool_payload(item) for item in value]
+    return str(value)
 
 
 async def _get_cached_agent(
@@ -605,9 +608,15 @@ async def stream_agent_response(
     agent: Any,
     user_message: str,
     thread_id: str,
+    history: Optional[Sequence[Dict[str, str]]] = None,
 ):
     config = {"configurable": {"thread_id": thread_id}}
-    payload = {"messages": [{"role": "user", "content": user_message}]}
+    prior_messages = [
+        {"role": item["role"], "content": item["content"]}
+        for item in (history or [])
+        if item.get("role") in {"user", "assistant"} and (item.get("content") or "").strip()
+    ]
+    payload = {"messages": [*prior_messages, {"role": "user", "content": user_message}]}
     last_reasoning_text = ""
 
     async for event in agent.astream_events(payload, config=config, version="v2"):
@@ -631,7 +640,35 @@ async def stream_agent_response(
                 yield {"type": "token", "content": token_text}
         elif event_name == "on_tool_start":
             tool_name = event.get("name") or "tool"
-            yield {"type": "tool_start", "content": tool_name}
+            yield {
+                "type": "tool_start",
+                "content": tool_name,
+                "tool_call": {
+                    "id": event.get("run_id") or tool_name,
+                    "name": tool_name,
+                    "input": _serialize_tool_payload(event_data.get("input")),
+                },
+            }
         elif event_name == "on_tool_end":
             tool_name = event.get("name") or "tool"
-            yield {"type": "tool_end", "content": tool_name}
+            yield {
+                "type": "tool_end",
+                "content": tool_name,
+                "tool_call": {
+                    "id": event.get("run_id") or tool_name,
+                    "name": tool_name,
+                    "output": _serialize_tool_payload(event_data.get("output")),
+                },
+            }
+        elif event_name == "on_tool_error":
+            tool_name = event.get("name") or "tool"
+            error = event_data.get("error")
+            yield {
+                "type": "tool_error",
+                "content": tool_name,
+                "tool_call": {
+                    "id": event.get("run_id") or tool_name,
+                    "name": tool_name,
+                    "error": _serialize_tool_payload(error),
+                },
+            }

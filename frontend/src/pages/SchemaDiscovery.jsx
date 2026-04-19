@@ -13,6 +13,7 @@ import OfficePreview from "../components/OfficePreview";
 import FieldsTab from "../components/FieldsTab";
 import TablesTab from "../components/TablesTab";
 import StatsTab from "../components/StatsTab";
+import { PanelContentSkeleton, SchemaDiscoverySkeleton } from "../components/Skeletons";
 import JSZip from "jszip";
 
 import { getDocs, downloadFile } from "../services/storage";
@@ -1092,6 +1093,10 @@ const SchemaDiscovery = () => {
     onRedoTable: redoTable,
   };
 
+  if (isLoadingDocs) {
+    return <SchemaDiscoverySkeleton />;
+  }
+
   return (
     <div className="flex flex-col h-screen bg-white text-slate-900 font-sans overflow-hidden">
       {/* TOP NAVBAR */}
@@ -1293,7 +1298,7 @@ const SchemaDiscovery = () => {
           <div className="flex-1 overflow-y-auto bg-white p-4 lg:p-6 custom-scrollbar">
             {activeTab === "fields" && (
               isLoadingMarkdown ? (
-                <div className="flex flex-col items-center justify-center h-full text-slate-400 p-10"><Loader2 className="animate-spin mb-4" size={24} /><p className="text-sm font-medium">Parsing definitions...</p></div>
+                <PanelContentSkeleton lines={8} />
               ) : schemaData ? (
                 <div className="max-w-160 mx-auto origin-top animate-in fade-in slide-in-from-bottom-2 duration-300"><FieldsTab {...fieldProps} /></div>
               ) : (
@@ -1305,7 +1310,7 @@ const SchemaDiscovery = () => {
             )}
             {activeTab === "tables" && (
               isLoadingMarkdown ? (
-                <div className="flex flex-col items-center justify-center h-full text-slate-400 p-10"><Loader2 className="animate-spin mb-4" size={24} /><p className="text-sm">Mapping tables...</p></div>
+                <PanelContentSkeleton lines={6} />
               ) : editableTables.length > 0 ? (
                 <div className="max-w-5xl mx-auto origin-top animate-in fade-in slide-in-from-bottom-2 duration-300"><TablesTab {...tableProps} /></div>
               ) : (
