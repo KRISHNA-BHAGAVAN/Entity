@@ -7,19 +7,49 @@ from dotenv import load_dotenv
 from supabase import Client, ClientOptions, create_client
 import os
 
+from app.core.supabase_runtime import (
+    SupabaseRuntimeConfig,
+    get_runtime_supabase_config,
+    normalize_runtime_supabase_config,
+)
+
 load_dotenv(override=True)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-BUCKET_NAME = os.getenv("BUCKET_NAME")
+BUCKET_NAME = os.getenv("BUCKET_NAME", "documents")
 
-base_supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+base_supabase: Optional[Client] = None
+if SUPABASE_URL and SUPABASE_KEY:
+    base_supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
-def get_user_supabase_client(jwt_token: str) -> Client:
+def get_active_supabase_project_config() -> SupabaseRuntimeConfig:
+    runtime_config = get_runtime_supabase_config()
+    if runtime_config:
+        return runtime_config
+
+    if SUPABASE_URL and SUPABASE_KEY:
+        return SupabaseRuntimeConfig(url=SUPABASE_URL, anon_key=SUPABASE_KEY)
+
+    raise RuntimeError(
+        "Supabase project not configured for this request. Provide X-Supabase-Url and X-Supabase-Anon-Key headers."
+    )
+
+
+def get_user_supabase_client(
+    jwt_token: str,
+    supabase_url: Optional[str] = None,
+    supabase_key: Optional[str] = None,
+) -> Client:
+    if supabase_url and supabase_key:
+        project_config = normalize_runtime_supabase_config(supabase_url, supabase_key)
+    else:
+        project_config = get_active_supabase_project_config()
+
     supabase = create_client(
-        SUPABASE_URL,
-        SUPABASE_KEY,
+        project_config.url,
+        project_config.anon_key,
         options=ClientOptions(
             persist_session=False,
             auto_refresh_token=False,
@@ -93,9 +123,19 @@ def get_docs(event_id: Optional[str] = None, jwt_token: Optional[str] = None) ->
     ]
 
 
-def extract_and_store_markdown_from_path(doc_id: str, file_path: str, jwt_token: str):
+def extract_and_store_markdown_from_path(
+    doc_id: str,
+    file_path: str,
+    jwt_token: str,
+    supabase_url: Optional[str] = None,
+    supabase_key: Optional[str] = None,
+):
     try:
-        supabase = get_user_supabase_client(jwt_token)
+        supabase = get_user_supabase_client(
+            jwt_token,
+            supabase_url=supabase_url,
+            supabase_key=supabase_key,
+        )
         file_bytes = supabase.storage.from_(BUCKET_NAME).download(file_path)
         from extract import docx_bytes_to_markdown_for_preview
         from extract_tables import extract_tables_from_docx_bytes
@@ -140,17 +180,23 @@ def upload_doc(event_id: str, name: str, file_bytes: bytes, jwt_token: Optional[
         template_data["user_id"] = user_id
     supabase.table("templates").insert(template_data).execute()
     if jwt_token:
+        project_config = get_active_supabase_project_config()
         thread = threading.Thread(
             target=extract_and_store_markdown_from_path,
-            args=(doc_id, file_path, jwt_token),
+            args=(doc_id, file_path, jwt_token, project_config.url, project_config.anon_key),
         )
         thread.daemon = True
         thread.start()
     return doc_id
 
 
-def download_doc(doc_id: str, jwt_token: Optional[str] = None) -> bytes:
-    supabase = get_user_supabase_client(jwt_token)
+def download_doc(
+    doc_id: str,
+    jwt_token: Optional[str] = None,
+    supabase_url: Optional[str] = None,
+    supabase_key: Optional[str] = None,
+) -> bytes:
+    supabase = get_user_supabase_client(jwt_token, supabase_url=supabase_url, supabase_key=supabase_key)
     result = supabase.table("templates").select("original_file_path").eq("id", doc_id).single().execute()
     file_path = result.data["original_file_path"]
     return supabase.storage.from_(BUCKET_NAME).download(file_path)

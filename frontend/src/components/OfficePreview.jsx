@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, AlertCircle, Maximize2, X, Printer, Download, MoreVertical, Search, Info, ExternalLink, FolderPlus } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
+import { getSupabaseProjectHeaders } from '../config/api';
 
 const OfficePreview = ({ docId, fileName, driveFileId, previewStatus, isLoadingOuter = false, changedBlob = null, showChanges = false }) => {
     const [isFullscreen, setIsFullscreen] = useState(false);
@@ -38,6 +39,7 @@ const OfficePreview = ({ docId, fileName, driveFileId, previewStatus, isLoadingO
             const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/byod/upload-preview`, {
                 method: 'POST',
                 headers: {
+                    ...getSupabaseProjectHeaders(),
                     'Authorization': `Bearer ${token}`
                 },
                 body: formData
@@ -69,6 +71,7 @@ const OfficePreview = ({ docId, fileName, driveFileId, previewStatus, isLoadingO
             await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/byod/preview/${fileId}`, {
                 method: 'DELETE',
                 headers: {
+                    ...getSupabaseProjectHeaders(),
                     'Authorization': `Bearer ${token}`
                 }
             });

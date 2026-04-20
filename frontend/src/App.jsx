@@ -1,7 +1,7 @@
 // App.jsx
 import { useState, useEffect } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
-import { supabase } from "./services/supabaseClient";
+import { isConfigured, supabase } from "./services/supabaseClient";
 import { ToastProvider } from "./contexts/ToastContext";
 import { Auth } from "./components/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -11,6 +11,7 @@ import BYOKSettings from "./pages/BYOKSettings";
 import BYODCallback from "./pages/BYODCallback";
 import AgentChat from "./pages/AgentChat";
 import EventAgent from "./pages/EventAgent";
+import Setup from "./pages/Setup";
 // import EventDetail from "./pages/EventDetail";
 import EntityLogo from "./components/logo";
 import Reports from "./pages/Reports";
@@ -31,11 +32,17 @@ const App = () => {
   const [events, setEvents] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const hasSupabaseConfig = isConfigured();
 
   /* ---------------------------
      Session Init
   ---------------------------- */
   useEffect(() => {
+    if (!hasSupabaseConfig) {
+      setIsLoadingSession(false);
+      return;
+    }
+
     checkSession();
 
     const {
@@ -52,9 +59,15 @@ const App = () => {
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, hasSupabaseConfig]);
 
   const checkSession = async () => {
+    if (!hasSupabaseConfig) {
+      setSession(null);
+      setIsLoadingSession(false);
+      return;
+    }
+
     setIsLoadingSession(true);
     try {
       const { data } = await supabase.auth.getSession();
@@ -137,8 +150,22 @@ const App = () => {
     return <AppSessionSkeleton />;
   }
 
+  if (!hasSupabaseConfig) {
+    return (
+      <Routes>
+        <Route path="/setup" element={<Setup />} />
+        <Route path="*" element={<Auth showSetupEntry />} />
+      </Routes>
+    );
+  }
+
   if (!session) {
-    return <Auth />;
+    return (
+      <Routes>
+        <Route path="/setup" element={<Setup />} />
+        <Route path="*" element={<Auth showSetupEntry />} />
+      </Routes>
+    );
   }
 
   /* ---------------------------

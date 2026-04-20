@@ -8,7 +8,7 @@ from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from google.oauth2.credentials import Credentials
 
 from app.core.auth import get_jwt_token
-from app.integrations.supabase.storage import get_user_supabase_client
+from app.integrations.supabase.storage import get_active_supabase_project_config, get_user_supabase_client
 from app.modules.byod.service import SCOPES, byod_service
 from byok_encryption import byok_crypto
 
@@ -139,11 +139,12 @@ async def set_folder(data: dict = Body(...), token: Optional[str] = Depends(get_
 
         from drive_upload_worker import async_drive_upload_worker
 
+        project_config = get_active_supabase_project_config()
         for doc in docs_result.data or []:
             if doc.get("original_file_path"):
                 thread = threading.Thread(
                     target=async_drive_upload_worker,
-                    args=(doc["id"], token, doc["name"]),
+                    args=(doc["id"], token, doc["name"], project_config.url, project_config.anon_key),
                 )
                 thread.daemon = True
                 thread.start()

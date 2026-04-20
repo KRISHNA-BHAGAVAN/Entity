@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabaseClient";
 import {
   Loader2,
@@ -12,7 +13,8 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
-export const Auth = () => {
+export const Auth = ({ showSetupEntry = false }) => {
+  const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -143,6 +145,21 @@ export const Auth = () => {
           </p>
         </div>
 
+        {showSetupEntry && (
+          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-lg text-sm">
+            <p className="font-semibold">First time here?</p>
+            <p className="mt-1 text-emerald-700">
+              Configure your Supabase project before signing in.
+            </p>
+            <button
+              onClick={() => navigate("/setup")}
+              className="mt-3 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg transition-colors"
+            >
+              Setup Supabase Project
+            </button>
+          </div>
+        )}
+
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-700 rounded-lg text-sm flex flex-col gap-2 animate-in fade-in slide-in-from-top-2">
             <div className="flex items-start gap-2">
@@ -234,6 +251,7 @@ export const Auth = () => {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 required
+                autoComplete="name"
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                 placeholder="John Doe"
               />
@@ -249,6 +267,7 @@ export const Auth = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              autoComplete="email"
               className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
               placeholder="you@company.com"
             />

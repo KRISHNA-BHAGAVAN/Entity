@@ -17,6 +17,7 @@ from app.integrations.supabase.storage import (
     extract_and_store_markdown_from_path,
     get_docs,
     get_events,
+    get_active_supabase_project_config,
     get_user_supabase_client,
     sanitize_filename,
     save_event,
@@ -172,12 +173,27 @@ async def confirm_upload(data: dict, background_tasks: BackgroundTasks, token: O
     supabase.table("templates").upsert(update_data, on_conflict="id").execute()
 
     if file_path:
-        background_tasks.add_task(extract_and_store_markdown_from_path, doc_id, file_path, token)
+        project_config = get_active_supabase_project_config()
+        background_tasks.add_task(
+            extract_and_store_markdown_from_path,
+            doc_id,
+            file_path,
+            token,
+            project_config.url,
+            project_config.anon_key,
+        )
         try:
             user_id = supabase.auth.get_user().user.id
             drive_check = supabase.table("drive_connections").select("id").eq("user_id", user_id).execute()
             if drive_check.data:
-                background_tasks.add_task(async_drive_upload_worker, doc_id, token, data.get("name"))
+                background_tasks.add_task(
+                    async_drive_upload_worker,
+                    doc_id,
+                    token,
+                    data.get("name"),
+                    project_config.url,
+                    project_config.anon_key,
+                )
             else:
                 supabase.table("templates").update(
                     {"preview_status": "not_configured", "drive_file_id": None}

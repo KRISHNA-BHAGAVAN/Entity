@@ -1,15 +1,21 @@
 """Background worker for uploading documents to Google Drive"""
-from storage_service import get_user_supabase_client, download_doc
+from storage_service import download_doc, get_user_supabase_client
 from byod_service import byod_service
 
 
-def async_drive_upload_worker(doc_id: str, token: str, file_name: str):
+def async_drive_upload_worker(
+    doc_id: str,
+    token: str,
+    file_name: str,
+    supabase_url: str | None = None,
+    supabase_key: str | None = None,
+):
     """Upload a document to Google Drive in the background"""
     try:
-        supabase = get_user_supabase_client(token)
+        supabase = get_user_supabase_client(token, supabase_url=supabase_url, supabase_key=supabase_key)
         user_id = supabase.auth.get_user().user.id
         
-        file_bytes = download_doc(doc_id, token)
+        file_bytes = download_doc(doc_id, token, supabase_url=supabase_url, supabase_key=supabase_key)
         
         drive_file_id = byod_service.upload_bytes_to_drive(
             supabase, user_id, file_bytes, file_name, 
@@ -28,7 +34,7 @@ def async_drive_upload_worker(doc_id: str, token: str, file_name: str):
     except Exception as e:
         print(f"Drive upload failed for {doc_id}: {e}")
         try:
-            supabase = get_user_supabase_client(token)
+            supabase = get_user_supabase_client(token, supabase_url=supabase_url, supabase_key=supabase_key)
             supabase.table('templates').update({
                 'preview_status': 'error'
             }).eq('id', doc_id).execute()

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Plus, X, GripVertical, Save, Edit2, Columns, Info } from 'lucide-react';
-import { apiCall } from '../../config/api';
+import { apiCall, getSupabaseProjectHeaders } from '../../config/api';
 import { useToast } from '../../contexts/ToastContext';
 import { FileDown, AlertTriangle, CheckCircle, Loader2, Calendar } from 'lucide-react';
 import UnresolvedFallback from './UnresolvedFallback';
@@ -119,7 +119,10 @@ const ColumnConfig = () => {
         try {
             const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/report/download`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...getSupabaseProjectHeaders(),
+                },
                 body: JSON.stringify({
                     columns,
                     rows,

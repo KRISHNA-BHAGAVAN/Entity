@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { API_BASE_URL } from "../config/api";
+import { API_BASE_URL, getSupabaseProjectHeaders } from "../config/api";
 import { getAccessToken } from "../services/authSession";
 import {
   applyToolCallEvent,
@@ -98,6 +98,7 @@ export const useAgentStream = ({ eventIds }) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...getSupabaseProjectHeaders(),
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
@@ -237,6 +238,7 @@ export const useAgentStream = ({ eventIds }) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...getSupabaseProjectHeaders(),
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ thread_id: threadId }),

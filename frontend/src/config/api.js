@@ -1,4 +1,5 @@
 import { getAccessToken } from "../services/authSession";
+import { getRuntimeSupabaseConfig } from "../services/supabaseClient";
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -10,6 +11,16 @@ const getAuthHeaders = async () => {
 
   return {
     Authorization: `Bearer ${token}`,
+  };
+};
+
+export const getSupabaseProjectHeaders = () => {
+  const config = getRuntimeSupabaseConfig();
+  if (!config) return {};
+
+  return {
+    "X-Supabase-Url": config.url,
+    "X-Supabase-Anon-Key": config.anonKey,
   };
 };
 
@@ -36,6 +47,7 @@ export const apiCall = async (endpoint, options = {}) => {
       "Content-Type": "application/json",
     }),
     ...options.headers,
+    ...getSupabaseProjectHeaders(),
     ...authHeaders,
   };
 
