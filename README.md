@@ -182,8 +182,6 @@ BUCKET_NAME=your_storage_bucket_name
 MASTER_KEY=generate_using_generate_master_key.py
 ```
 
-
-
 **Generate master encryption key:**
 ```bash
 python generate_master_key.py

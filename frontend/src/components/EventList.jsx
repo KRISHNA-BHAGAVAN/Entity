@@ -14,7 +14,8 @@ import {
   Clock,
   ChevronRight,
   LayoutDashboard,
-  Box
+  Box,
+  Loader2
 } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 import ConfirmModal from './ConfirmModal';
